@@ -1,4 +1,4 @@
-open class Rect: Locus {
+open class Rect: Locus, Equatable {
 
     public let x: Double
     public let y: Double
