@@ -5,19 +5,31 @@ open class Node: Drawable {
     public let placeVar: AnimatableVariable<Transform>
     open var place: Transform {
         get { return placeVar.value }
-        set(val) { placeVar.value = val }
+        set(val) {
+            if placeVar.value != val {
+                placeVar.value = val
+            }
+        }
     }
 
     public let opaqueVar: Variable<Bool>
     open var opaque: Bool {
         get { return opaqueVar.value }
-        set(val) { opaqueVar.value = val }
+        set(val) {
+            if opaqueVar.value != val {
+                opaqueVar.value = val
+            }
+        }
     }
 
     public let opacityVar: AnimatableVariable<Double>
     open var opacity: Double {
         get { return opacityVar.value }
-        set(val) { opacityVar.value = val }
+        set(val) {
+            if opacityVar.value != val {
+                opacityVar.value = val
+            }
+        }
     }
 
     public let clipVar: Variable<Locus?>

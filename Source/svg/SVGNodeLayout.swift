@@ -69,7 +69,13 @@ class SVGNodeLayout: NodeLayout {
         let svgSizeInPixels = svgSize.toPixels(total: size)
 
         if let viewBox = self.viewBox {
-            node.clip = viewBox
+            if let rectClip = node.clip as? Rect {
+                if rectClip != viewBox {
+                    node.clip = viewBox
+                }
+            } else {
+                node.clip = viewBox
+            }
         }
         let viewBox = self.viewBox ?? Rect(x: 0, y: 0, w: svgSizeInPixels.w, h: svgSizeInPixels.h)
 
