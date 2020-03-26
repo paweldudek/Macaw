@@ -8,7 +8,10 @@ open class Gradient: Fill {
         self.stops = stops
     }
 
-    override func equals<T>(other: T) -> Bool where T: Gradient {
+    override func equals<T>(other: T) -> Bool where T: Fill {
+        guard let other = other as? Gradient else {
+            return false
+        }
         if userSpace == other.userSpace {
 
             if stops.isEmpty && other.stops.isEmpty {
