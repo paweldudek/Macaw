@@ -28,6 +28,9 @@ public enum MViewContentMode: Int {
 }
 
 open class MView: NSView, Touchable {
+    
+    private var needsSetNeedsLayoutCalled = false
+    
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
 
@@ -73,7 +76,16 @@ open class MView: NSView, Touchable {
     }
 
     func setNeedsDisplay() {
-        self.setNeedsDisplay(self.bounds)
+        guard !needsSetNeedsLayoutCalled else {
+            return
+        }
+
+        needsSetNeedsLayoutCalled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            strongSelf.setNeedsDisplay(strongSelf.bounds)
+            strongSelf.needsSetNeedsLayoutCalled = false
+        }
     }
 
     func layoutSubviews() {
