@@ -73,8 +73,8 @@ open class SVGParser {
 
     /// Parse the specified content of an SVG file.
     /// - returns: Root node of the corresponding Macaw scene.
-    open class func parse(text: String) throws -> Node {
-        return try SVGParser(text).parse()
+    open class func parse(text: String, baseStyle: [String: String] = [:]) throws -> Node {
+        return try SVGParser(text).parse(baseStyle: baseStyle)
     }
 
     let availableStyleAttributes = ["stroke",
@@ -132,7 +132,7 @@ open class SVGParser {
         self.initialPosition = pos
     }
 
-    fileprivate func parse() throws -> Group {
+    fileprivate func parse(baseStyle: [String: String] = [:]) throws -> Group {
         let config = SWXMLHash.config { config in
             config.shouldProcessNamespaces = true
         }
@@ -149,10 +149,23 @@ open class SVGParser {
             }
         }
         let layout = svgElement != nil ? try parseViewBox(svgElement!) : nil
-        try parseSvg(parsedXml.children)
+        try parseSvg(parsedXml.children, baseStyle: baseStyle)
         let root = layout != nil ? SVGCanvas(layout: layout!, contents: nodes) : Group(contents: nodes)
         if let opacity = svgElement?.attribute(by: "opacity") {
             root.opacity = getOpacity(opacity.text)
+        }
+        if let style = svgElement?.attribute(by: "style") {
+            let styleComponents = style.text.components(separatedBy: ";")
+            for styleComponent in styleComponents {
+                let values = styleComponent.components(separatedBy: ":")
+                if let firstValue = values.first, let lastValue = values.last, values.count > 1 {
+                    if firstValue == "vertical-align",
+                    let verticalAlign = doubleFromString(lastValue),
+                    let canvas = root as? SVGCanvas {
+                        canvas.verticalAlign = verticalAlign
+                    }
+                }
+            }
         }
         return root
     }
@@ -191,12 +204,12 @@ open class SVGParser {
         }
     }
 
-    fileprivate func parseSvg(_ children: [XMLIndexer]) throws {
+    fileprivate func parseSvg(_ children: [XMLIndexer], baseStyle: [String: String]) throws {
         try children.forEach { child in
             if let element = child.element {
                 if element.name == "svg" {
-                    try parseSvg(child.children)
-                } else if let node = try parseNode(child) {
+                    try parseSvg(child.children, baseStyle: baseStyle)
+                } else if let node = try parseNode(child, groupStyle: baseStyle) {
                     self.nodes.append(node)
                 }
             }
