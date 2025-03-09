@@ -426,6 +426,8 @@ open class SVGParser {
                              pos: position)
         case "use":
             return try parseUse(node, groupStyle: style, place: position)
+        case "a":
+            return try parseGroup(node, style: style)
         case "title", "desc", "mask", "clip", "filter",
              "linearGradient", "radialGradient", SVGKeys.fill:
             break
