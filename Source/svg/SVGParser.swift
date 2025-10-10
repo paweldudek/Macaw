@@ -209,7 +209,7 @@ open class SVGParser {
             if let element = child.element {
                 if element.name == "svg" {
                     try parseSvg(child.children, baseStyle: baseStyle)
-                } else if let node = try parseNode(child, groupStyle: baseStyle) {
+                } else if let node = try parseNode(child, groupStyle: baseStyle, ancestorClasses: []) {
                     self.nodes.append(node)
                 }
             }
@@ -268,21 +268,25 @@ open class SVGParser {
                              yAlign: yAligningMode)
     }
 
-    fileprivate func parseNode(_ node: XMLIndexer, groupStyle: [String: String] = [:]) throws -> Node? {
+    fileprivate func parseNode(_ node: XMLIndexer,
+                               groupStyle: [String: String] = [:],
+                               ancestorClasses: [String] = []) throws -> Node? {
         var result: Node?
         if let element = node.element {
-            let style = getStyleAttributes(groupStyle, element: element)
+            let style = getStyleAttributes(groupStyle, element: element, ancestorClasses: ancestorClasses)
+            let elementClasses = getClassNames(element)
+            let updatedAncestorClasses = ancestorClasses + elementClasses
             if style["display"] == "none" {
                 return .none
             }
             switch element.name {
             case "g":
-                result = try parseGroup(node, style: style)
+                result = try parseGroup(node, style: style, ancestorClasses: updatedAncestorClasses)
             case "style", "defs":
                 // do nothing - it was parsed on first iteration
                 return .none
             default:
-                result = try parseElement(node, style: style)
+                result = try parseElement(node, style: style, ancestorClasses: updatedAncestorClasses)
             }
 
             if let result = result,
@@ -301,7 +305,9 @@ open class SVGParser {
         }
     }
 
-    fileprivate func parseElement(_ node: XMLIndexer, style: [String: String]) throws -> Node? {
+    fileprivate func parseElement(_ node: XMLIndexer,
+                                  style: [String: String],
+                                  ancestorClasses: [String]) throws -> Node? {
         if style["visibility"] == "hidden" {
             return .none
         }
@@ -425,9 +431,9 @@ open class SVGParser {
                              fontWeight: getFontWeight(style),
                              pos: position)
         case "use":
-            return try parseUse(node, groupStyle: style, place: position)
+            return try parseUse(node, groupStyle: style, place: position, ancestorClasses: ancestorClasses)
         case "a":
-            return try parseGroup(node, style: style)
+            return try parseGroup(node, style: style, ancestorClasses: ancestorClasses)
         case "title", "desc", "mask", "clip", "filter",
              "linearGradient", "radialGradient", SVGKeys.fill:
             break
@@ -505,13 +511,15 @@ open class SVGParser {
                                 contentUserSpace: contentUserSpace)
     }
 
-    fileprivate func parseGroup(_ group: XMLIndexer, style: [String: String]) throws -> Group? {
+    fileprivate func parseGroup(_ group: XMLIndexer,
+                                style: [String: String],
+                                ancestorClasses: [String]) throws -> Group? {
         guard let element = group.element else {
             return .none
         }
         var groupNodes: [Node] = []
         try group.children.forEach { child in
-            if let node = try parseNode(child, groupStyle: style) {
+            if let node = try parseNode(child, groupStyle: style, ancestorClasses: ancestorClasses) {
                 groupNodes.append(node)
             }
         }
@@ -676,10 +684,11 @@ open class SVGParser {
     }
 
     fileprivate func getStyleAttributes(_ groupAttributes: [String: String],
-                                        element: SWXMLHash.XMLElement) -> [String: String] {
+                                        element: SWXMLHash.XMLElement,
+                                        ancestorClasses: [String] = []) -> [String: String] {
         var styleAttributes: [String: String] = groupAttributes
 
-        for (att, val) in styles.getStyles(element: element) {
+        for (att, val) in styles.getStyles(element: element, ancestorClasses: ancestorClasses) {
             if styleAttributes.index(forKey: att) == nil {
                 styleAttributes.updateValue(val, forKey: att)
             }
@@ -707,6 +716,13 @@ open class SVGParser {
         }
 
         return styleAttributes
+    }
+
+    fileprivate func getClassNames(_ element: SWXMLHash.XMLElement) -> [String] {
+        guard let classAttribute = element.allAttributes["class"]?.text else {
+            return []
+        }
+        return classAttribute.split(whereSeparator: { $0.isWhitespace }).map(String.init)
     }
 
     fileprivate func createColorFromHex(_ hexString: String, opacity: Double = 1) -> Color {
@@ -1279,7 +1295,8 @@ open class SVGParser {
 
     fileprivate func parseUse(_ use: XMLIndexer,
                               groupStyle: [String: String] = [:],
-                              place: Transform = .identity) throws -> Node? {
+                              place: Transform = .identity,
+                              ancestorClasses: [String] = []) throws -> Node? {
         guard let element = use.element, let link = element.allAttributes["xlink:href"]?.text else {
             return .none
         }
@@ -1293,7 +1310,9 @@ open class SVGParser {
                 defer {
                     usedReferenced.removeValue(forKey: id)
                 }
-                if let node = try parseNode(referenceNode, groupStyle: groupStyle) {
+                if let node = try parseNode(referenceNode,
+                                           groupStyle: groupStyle,
+                                           ancestorClasses: ancestorClasses) {
                     node.place = place.move(dx: getDoubleValue(element, attribute: "x") ?? 0,
                                             dy: getDoubleValue(element, attribute: "y") ?? 0).concat(with: node.place)
                     return node
@@ -1350,16 +1369,23 @@ open class SVGParser {
         }
 
         if mask.children.count == 1 {
-            let node = try parseNode(mask.children.first!, groupStyle: styles)!
+            let node = try parseNode(mask.children.first!,
+                                     groupStyle: styles,
+                                     ancestorClasses: [])!
             return UserSpaceNode(node: node, userSpace: userSpace)
         }
 
         var nodes = [Node]()
         try mask.children.forEach { indexer in
             let position = getPosition(indexer.element!)
-            if let useNode = try parseUse(indexer, groupStyle: styles, place: position) {
+            if let useNode = try parseUse(indexer,
+                                          groupStyle: styles,
+                                          place: position,
+                                          ancestorClasses: []) {
                 nodes.append(useNode)
-            } else if let contentNode = try parseNode(indexer, groupStyle: styles) {
+            } else if let contentNode = try parseNode(indexer,
+                                                      groupStyle: styles,
+                                                      ancestorClasses: []) {
                 nodes.append(contentNode)
             }
         }

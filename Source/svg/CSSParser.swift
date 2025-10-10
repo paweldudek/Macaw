@@ -11,10 +11,20 @@ import Foundation
 import SWXMLHash
 #endif
 
-enum Selector {
+private enum SimpleSelector: Hashable {
     case byId(String)
     case byClass(String)
     case byTag(String)
+}
+
+private enum Selector {
+    case simple(SimpleSelector)
+    case descendant(ancestor: SimpleSelector, descendant: SimpleSelector)
+}
+
+private struct ClassDescendantKey: Hashable {
+    let className: String
+    let tag: String
 }
 
 class CSSParser {
@@ -22,54 +32,38 @@ class CSSParser {
     fileprivate var stylesByClass: [String: [String: String]] = [:]
     fileprivate var stylesById: [String: [String: String]] = [:]
     fileprivate var stylesByTag: [String: [String: String]] = [:]
+    fileprivate var stylesByClassDescendant: [ClassDescendantKey: [String: String]] = [:]
 
     func parse(content: String) {
-        let parts = content.components(separatedBy: .whitespacesAndNewlines).joined().split(separator: "{")
+        let contentWithoutComments = removeComments(from: content)
+        let rules = contentWithoutComments.components(separatedBy: "}")
 
-        var separatedParts = [String.SubSequence]()
+        for rawRule in rules {
+            guard let braceIndex = rawRule.firstIndex(of: "{") else {
+                continue
+            }
 
-        parts.forEach { substring in
-            separatedParts.append(contentsOf: substring.split(separator: "}"))
-        }
+            let selectorPart = rawRule[..<braceIndex]
+            let bodyPart = rawRule[rawRule.index(after: braceIndex)...]
 
-        if separatedParts.count % 2 == 0 {
+            let declarations = parseDeclarations(from: String(bodyPart))
+            if declarations.isEmpty {
+                continue
+            }
 
-            let headers = stride(from: 0, to: separatedParts.count, by: 2).map { String(separatedParts[$0]) }
-            let bodies = stride(from: 1, to: separatedParts.count, by: 2).map { separatedParts[$0] }
-
-            for (index, header) in headers.enumerated() {
-                for headerPart in header.split(separator: ",") where headerPart.count > 1 {
-                    let selector = parseSelector(text: String(headerPart))
-                    var currentStyles = getStyles(selector: selector)
-                    if currentStyles == nil {
-                        currentStyles = [String: String]()
-                    }
-                    let style = String(bodies[index])
-                    let styleParts = style.components(separatedBy: ";")
-                    styleParts.forEach { styleAttribute in
-                        if !styleAttribute.isEmpty {
-                            let currentStyle = styleAttribute.components(separatedBy: ":")
-                            if currentStyle.count == 2 {
-                                currentStyles![currentStyle[0]] = currentStyle[1]
-                            }
-                        }
-                    }
-                    setStyles(selector: selector, styles: currentStyles!)
+            let selectors = selectorPart.split(separator: ",")
+            for selectorText in selectors {
+                let trimmed = selectorText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty,
+                      let selector = parseSelector(text: trimmed) else {
+                    continue
                 }
+                setStyles(selector: selector, styles: declarations)
             }
         }
     }
 
-    func parseSelector(text: String) -> Selector {
-        if text.first == "#" {
-            return .byId(String(text.dropFirst()))
-        } else if text.first == "." {
-            return .byClass(String(text.dropFirst()))
-        }
-        return .byTag(text)
-    }
-
-    func getStyles(element: SWXMLHash.XMLElement) -> [String: String] {
+    func getStyles(element: SWXMLHash.XMLElement, ancestorClasses: [String]) -> [String: String] {
         var styleAttributes = [String: String]()
 
         if let styles = stylesByTag[element.name] {
@@ -106,10 +100,51 @@ class CSSParser {
             }
         }
 
+        for className in ancestorClasses {
+            let key = ClassDescendantKey(className: className, tag: element.name)
+            if let styles = stylesByClassDescendant[key] {
+                for (att, val) in styles where styleAttributes.index(forKey: att) == nil {
+                    styleAttributes.updateValue(val, forKey: att)
+                }
+            }
+        }
+
         return styleAttributes
     }
 
-    fileprivate func getStyles(selector: Selector) -> [String: String]? {
+    fileprivate func parseSelector(text: String) -> Selector? {
+        let tokens = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+
+        guard let lastToken = tokens.last,
+              let descendant = parseSimpleSelector(text: lastToken) else {
+            return .none
+        }
+
+        if tokens.count == 1 {
+            return .simple(descendant)
+        }
+
+        if tokens.count == 2,
+           let ancestor = parseSimpleSelector(text: tokens[0]) {
+            return .descendant(ancestor: ancestor, descendant: descendant)
+        }
+
+        return .none
+    }
+
+    fileprivate func parseSimpleSelector(text: String) -> SimpleSelector? {
+        guard let first = text.first else {
+            return .none
+        }
+        if first == "#" {
+            return .byId(String(text.dropFirst()))
+        } else if first == "." {
+            return .byClass(String(text.dropFirst()))
+        }
+        return .byTag(text)
+    }
+
+    fileprivate func getStyles(selector: SimpleSelector) -> [String: String]? {
         switch selector {
         case .byId(let id):
             return stylesById[id]
@@ -122,6 +157,28 @@ class CSSParser {
 
     fileprivate func setStyles(selector: Selector, styles: [String: String]) {
         switch selector {
+        case .simple(let simpleSelector):
+            var currentStyles = getStyles(selector: simpleSelector) ?? [:]
+            for (attribute, value) in styles {
+                currentStyles[attribute] = value
+            }
+            setStyles(simpleSelector: simpleSelector, styles: currentStyles)
+        case .descendant(let ancestor, let descendant):
+            guard case .byClass(let className) = ancestor,
+                  case .byTag(let tag) = descendant else {
+                return
+            }
+            let key = ClassDescendantKey(className: className, tag: tag)
+            var currentStyles = stylesByClassDescendant[key] ?? [:]
+            for (attribute, value) in styles {
+                currentStyles[attribute] = value
+            }
+            stylesByClassDescendant[key] = currentStyles
+        }
+    }
+
+    fileprivate func setStyles(simpleSelector: SimpleSelector, styles: [String: String]) {
+        switch simpleSelector {
         case .byId(let id):
             stylesById[id] = styles
         case .byTag(let tag):
@@ -129,6 +186,35 @@ class CSSParser {
         case .byClass(let name):
             stylesByClass[name] = styles
         }
+    }
+
+    fileprivate func parseDeclarations(from body: String) -> [String: String] {
+        var declarations: [String: String] = [:]
+
+        let cleaned = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleaned.isEmpty else {
+            return declarations
+        }
+
+        cleaned.split(separator: ";").forEach { attribute in
+            let parts = attribute.split(separator: ":", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if parts.count == 2, !parts[0].isEmpty {
+                declarations[parts[0]] = parts[1]
+            }
+        }
+
+        return declarations
+    }
+
+    fileprivate func removeComments(from content: String) -> String {
+        var result = content
+        while let startRange = result.range(of: "/*"),
+              let endRange = result.range(of: "*/", range: startRange.upperBound..<result.endIndex) {
+            result.removeSubrange(startRange.lowerBound..<endRange.upperBound)
+        }
+        return result
     }
 
 }
