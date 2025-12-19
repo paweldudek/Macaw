@@ -98,6 +98,8 @@ open class SVGParser {
                                     "font-size",
                                     "font-weight",
                                     "text-anchor",
+                                    "dominant-baseline",
+                                    "alignment-baseline",
                                     "visibility",
                                     "display"]
 
@@ -426,6 +428,7 @@ open class SVGParser {
                              fill: getFillColor(style, groupStyle: style),
                              stroke: getStroke(style, groupStyle: style),
                              opacity: getOpacity(style),
+                             baseline: getBaseline(style),
                              fontName: getFontName(style),
                              fontSize: getFontSize(style),
                              fontWeight: getFontWeight(style),
@@ -1060,6 +1063,7 @@ open class SVGParser {
                                fill: Fill?,
                                stroke: Stroke?,
                                opacity: Double,
+                               baseline: Baseline?,
                                fontName: String?,
                                fontSize: Int?,
                                fontWeight: String?,
@@ -1073,6 +1077,7 @@ open class SVGParser {
                                    fill: fill,
                                    stroke: stroke,
                                    opacity: opacity,
+                                   baseline: baseline,
                                    fontName: fontName,
                                    fontSize: fontSize,
                                    fontWeight: fontWeight,
@@ -1085,6 +1090,7 @@ open class SVGParser {
                                                 fill: fill,
                                                 stroke: stroke,
                                                 opacity: opacity,
+                                                baseline: baseline,
                                                 fontName: fontName,
                                                 fontSize: fontSize,
                                                 fontWeight: fontWeight,
@@ -1109,6 +1115,7 @@ open class SVGParser {
                                      fill: Fill?,
                                      stroke: Stroke?,
                                      opacity: Double,
+                                     baseline: Baseline?,
                                      fontName: String?,
                                      fontSize: Int?,
                                      fontWeight: String?,
@@ -1122,7 +1129,7 @@ open class SVGParser {
                     fill: fill,
                     stroke: stroke,
                     align: anchorToAlign(textAnchor),
-                    baseline: .bottom,
+                    baseline: baseline ?? .bottom,
                     place: position,
                     opacity: opacity,
                     tag: getTag(text))
@@ -1135,6 +1142,7 @@ open class SVGParser {
                                    fill: Fill?,
                                    stroke: Stroke?,
                                    opacity: Double,
+                                   baseline: Baseline?,
                                    fontName: String?,
                                    fontSize: Int?,
                                    fontWeight: String?,
@@ -1176,7 +1184,7 @@ open class SVGParser {
                             fill: fill,
                             stroke: stroke,
                             align: anchorToAlign(textAnchor),
-                            baseline: .alphabetic,
+                            baseline: baseline ?? .alphabetic,
                             place: place,
                             opacity: opacity)
             } else if let tspanElement = element as? SWXMLHash.XMLElement,
@@ -1189,6 +1197,7 @@ open class SVGParser {
                                   fill: fill,
                                   stroke: stroke,
                                   opacity: opacity,
+                                  baseline: baseline,
                                   fontName: fontName,
                                   fontSize: fontSize,
                                   fontWeight: fontWeight,
@@ -1216,6 +1225,7 @@ open class SVGParser {
                                 fill: Fill?,
                                 stroke: Stroke?,
                                 opacity: Double,
+                                baseline: Baseline?,
                                 fontName: String?,
                                 fontSize: Int?,
                                 fontWeight: String?,
@@ -1236,7 +1246,7 @@ open class SVGParser {
                     fill: (attributes[SVGKeys.fill] != nil) ? getFillColor(attributes)! : fill,
                     stroke: stroke ?? getStroke(attributes),
                     align: anchorToAlign(textAnchor ?? getTextAnchor(attributes)),
-                    baseline: .alphabetic,
+                    baseline: getBaseline(attributes) ?? baseline ?? .alphabetic,
                     place: pos,
                     opacity: getOpacity(attributes),
                     tag: getTag(element))
@@ -1804,6 +1814,32 @@ open class SVGParser {
             return .none
         }
         return textAnchor
+    }
+
+    fileprivate func getBaseline(_ attributes: [String: String]) -> Baseline? {
+        if let alignmentBaseline = attributes["alignment-baseline"] {
+            return baselineFromString(alignmentBaseline)
+        }
+        if let dominantBaseline = attributes["dominant-baseline"] {
+            return baselineFromString(dominantBaseline)
+        }
+        return nil
+    }
+
+    fileprivate func baselineFromString(_ value: String) -> Baseline? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "alphabetic", "baseline":
+            return .alphabetic
+        case "central", "middle", "mathematical":
+            return .mid
+        case "text-before-edge", "text-top":
+            return .top
+        case "text-after-edge", "text-bottom":
+            return .bottom
+        default:
+            return nil
+        }
     }
 
     fileprivate func getTextDecoration(_ attributes: [String: String], decoration: String) -> Bool? {

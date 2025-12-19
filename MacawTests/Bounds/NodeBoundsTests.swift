@@ -189,6 +189,19 @@ class NodeBoundsTests: XCTestCase {
             })
         }
     }
+
+    func testTextBaselineOffsets() {
+        let font = MFont.systemFont(ofSize: MFont.mSystemFontSize)
+        let alphabeticText = Text(text: "Hello", baseline: .alphabetic)
+        let midText = Text(text: "Hello", baseline: .mid)
+
+        let expectedAlphabeticY = -font.ascender.doubleValue
+        let expectedMidY = -((font.ascender - font.descender) / 2).doubleValue
+
+        XCTAssertEqual(alphabeticText.bounds?.y, expectedAlphabeticY, accuracy: 0.0001)
+        XCTAssertEqual(midText.bounds?.y, expectedMidY, accuracy: 0.0001)
+        XCTAssertNotEqual(alphabeticText.bounds?.y, midText.bounds?.y)
+    }
     
     // MARK: - Group
     
