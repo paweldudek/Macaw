@@ -437,7 +437,7 @@ open class SVGParser {
             return try parseUse(node, groupStyle: style, place: position, ancestorClasses: ancestorClasses)
         case "a":
             return try parseGroup(node, style: style, ancestorClasses: ancestorClasses)
-        case "title", "desc", "mask", "clip", "filter",
+        case "title", "desc", "mask", "clip", "clipPath", "filter",
              "linearGradient", "radialGradient", SVGKeys.fill:
             break
         default:
@@ -2047,13 +2047,14 @@ private class PathDataReader {
             return .none
         }
 
-        guard ch >= "0" && ch <= "9" || ch == "." || ch == "-" else {
+        guard ch >= "0" && ch <= "9" || ch == "." || ch == "-" || ch == "+" else {
             return .none
         }
 
         var chars = [ch]
         var hasDot = ch == "."
-        while let ch = readDigit(&hasDot) {
+        var hasExponent = false
+        while let ch = readDigit(&hasDot, &hasExponent) {
             chars.append(ch)
         }
 
@@ -2065,11 +2066,16 @@ private class PathDataReader {
         return value
     }
 
-    fileprivate func readDigit(_ hasDot: inout Bool) -> UnicodeScalar? {
+    fileprivate func readDigit(_ hasDot: inout Bool, _ hasExponent: inout Bool) -> UnicodeScalar? {
         if let ch = readNext() {
-            if (ch >= "0" && ch <= "9") || ch == "e" || (previous == "e" && ch == "-") {
+            if ch >= "0" && ch <= "9" {
                 return ch
-            } else if ch == "." && !hasDot {
+            } else if (ch == "e" || ch == "E") && !hasExponent {
+                hasExponent = true
+                return ch
+            } else if (previous == "e" || previous == "E") && (ch == "-" || ch == "+") {
+                return ch
+            } else if ch == "." && !hasDot && !hasExponent {
                 hasDot = true
                 return ch
             }
