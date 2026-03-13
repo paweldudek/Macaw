@@ -1,5 +1,7 @@
 import Foundation
-#if os(OSX)
+#if SWIFT_PACKAGE
+@testable import Macaw
+#elseif os(OSX)
 @testable import MacawOSX
 #endif
 

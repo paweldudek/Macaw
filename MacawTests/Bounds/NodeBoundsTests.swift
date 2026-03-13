@@ -8,7 +8,9 @@
 
 import XCTest
 
-#if os(OSX)
+#if SWIFT_PACKAGE
+@testable import Macaw
+#elseif os(OSX)
 @testable import MacawOSX
 #elseif os(iOS)
 @testable import Macaw
@@ -198,9 +200,9 @@ class NodeBoundsTests: XCTestCase {
         let expectedAlphabeticY = -font.ascender.doubleValue
         let expectedMidY = -((font.ascender - font.descender) / 2).doubleValue
 
-        XCTAssertEqual(alphabeticText.bounds?.y, expectedAlphabeticY, accuracy: 0.0001)
-        XCTAssertEqual(midText.bounds?.y, expectedMidY, accuracy: 0.0001)
-        XCTAssertNotEqual(alphabeticText.bounds?.y, midText.bounds?.y)
+        XCTAssertEqual(alphabeticText.bounds.y, expectedAlphabeticY, accuracy: 0.0001)
+        XCTAssertEqual(midText.bounds.y, expectedMidY, accuracy: 0.0001)
+        XCTAssertNotEqual(alphabeticText.bounds.y, midText.bounds.y)
     }
     
     // MARK: - Group

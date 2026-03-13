@@ -6,7 +6,10 @@
 //  Copyright © 2018 Exyte. All rights reserved.
 //
 
-#if os(OSX)
+#if SWIFT_PACKAGE
+import Foundation
+@testable import Macaw
+#elseif os(OSX)
 import Foundation
 @testable import MacawOSX
 #endif
@@ -383,7 +386,7 @@ extension Polygon: Serializable {
 }
 #endif
 
-#if os(OSX)
+#if os(OSX) && !SWIFT_PACKAGE
 extension MacawOSX.Polygon: Serializable {
     
     func toDictionary() -> [String:Any] {

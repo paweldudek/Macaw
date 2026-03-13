@@ -1,6 +1,8 @@
 import XCTest
 
-#if os(OSX)
+#if SWIFT_PACKAGE
+@testable import Macaw
+#elseif os(OSX)
 @testable import MacawOSX
 #elseif os(iOS)
 @testable import Macaw
