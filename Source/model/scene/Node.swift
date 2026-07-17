@@ -328,6 +328,11 @@ open class Node: Drawable {
         return .none
     }
 
+    /// The node's natural size before it is laid out in a container.
+    open var intrinsicSize: Size? {
+        return bounds?.size()
+    }
+
     // MARK: - Hash
 
     override open var hash: Int {

@@ -40,6 +40,8 @@ class SVGSize {
 
 protocol NodeLayout {
 
+    var intrinsicSize: Size? { get }
+
     func computeSize(parent: Size) -> Size
 
     func layout(node: Node, in size: Size)
@@ -59,6 +61,29 @@ class SVGNodeLayout: NodeLayout {
         self.scaling = scaling ?? .meet
         self.xAlign = xAlign ?? .mid
         self.yAlign = yAlign ?? .mid
+    }
+
+    var intrinsicSize: Size? {
+        let viewBoxSize = validSize(viewBox?.size())
+
+        switch (svgSize.width, svgSize.height) {
+        case let (.pixels(width), .pixels(height)):
+            return validSize(Size(w: width, h: height)) ?? viewBoxSize
+        case let (.pixels(width), _):
+            guard let viewBoxSize = viewBoxSize else { return nil }
+            return validSize(Size(
+                w: width,
+                h: width * viewBoxSize.h / viewBoxSize.w
+            )) ?? viewBoxSize
+        case let (_, .pixels(height)):
+            guard let viewBoxSize = viewBoxSize else { return nil }
+            return validSize(Size(
+                w: height * viewBoxSize.w / viewBoxSize.h,
+                h: height
+            )) ?? viewBoxSize
+        default:
+            return viewBoxSize
+        }
     }
 
     func computeSize(parent: Size) -> Size {
@@ -92,5 +117,16 @@ class SVGNodeLayout: NodeLayout {
 
         // move to (0, 0)
         node.place = node.place.move(dx: -viewBox.x, dy: -viewBox.y)
+    }
+
+    private func validSize(_ size: Size?) -> Size? {
+        guard let size = size,
+              size.w.isFinite,
+              size.h.isFinite,
+              size.w > 0,
+              size.h > 0 else {
+            return nil
+        }
+        return size
     }
 }
