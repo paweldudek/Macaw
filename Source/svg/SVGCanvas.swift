@@ -30,4 +30,8 @@ public class SVGCanvas: Group {
         return size.rect(at: .origin)
     }
 
+    public override var intrinsicSize: Size? {
+        return layout.intrinsicSize ?? super.bounds?.size()
+    }
+
 }

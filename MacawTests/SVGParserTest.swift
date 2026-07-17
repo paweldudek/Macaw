@@ -88,6 +88,39 @@ class SVGParserTest: XCTestCase {
         XCTAssertFalse(output.contains("Shape clipPath not supported"))
     }
 
+    func testViewBoxProvidesIntrinsicSizeWithoutLayout() throws {
+        let node = try SVGParser.parse(text: """
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 32">
+          <rect width="120" height="32"/>
+        </svg>
+        """)
+
+        XCTAssertEqual(node.intrinsicSize?.w, 120)
+        XCTAssertEqual(node.intrinsicSize?.h, 32)
+    }
+
+    func testAbsoluteDimensionsProvideIntrinsicSizeWithoutLayout() throws {
+        let node = try SVGParser.parse(text: """
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="24" viewBox="0 0 120 32">
+          <rect width="120" height="32"/>
+        </svg>
+        """)
+
+        XCTAssertEqual(node.intrinsicSize?.w, 48)
+        XCTAssertEqual(node.intrinsicSize?.h, 24)
+    }
+
+    func testSingleAbsoluteDimensionUsesViewBoxAspectRatioForIntrinsicSize() throws {
+        let node = try SVGParser.parse(text: """
+        <svg xmlns="http://www.w3.org/2000/svg" width="60" viewBox="0 0 120 32">
+          <rect width="120" height="32"/>
+        </svg>
+        """)
+
+        XCTAssertEqual(node.intrinsicSize?.w, 60)
+        XCTAssertEqual(node.intrinsicSize?.h, 16)
+    }
+
     private func flatten(_ node: Node) -> [Node] {
         if let group = node as? Group {
             return [group] + group.contents.flatMap(flatten)
