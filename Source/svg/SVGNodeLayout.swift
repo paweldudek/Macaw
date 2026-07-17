@@ -41,6 +41,7 @@ class SVGSize {
 protocol NodeLayout {
 
     var intrinsicSize: Size? { get }
+    var allowsIntrinsicSizeFallback: Bool { get }
 
     func computeSize(parent: Size) -> Size
 
@@ -68,22 +69,28 @@ class SVGNodeLayout: NodeLayout {
 
         switch (svgSize.width, svgSize.height) {
         case let (.pixels(width), .pixels(height)):
-            return validSize(Size(w: width, h: height)) ?? viewBoxSize
+            return validSize(Size(w: width, h: height))
         case let (.pixels(width), _):
+            guard width.isFinite, width > 0 else { return nil }
             guard let viewBoxSize = viewBoxSize else { return nil }
-            return validSize(Size(
+            return Size(
                 w: width,
                 h: width * viewBoxSize.h / viewBoxSize.w
-            )) ?? viewBoxSize
+            )
         case let (_, .pixels(height)):
+            guard height.isFinite, height > 0 else { return nil }
             guard let viewBoxSize = viewBoxSize else { return nil }
-            return validSize(Size(
+            return Size(
                 w: height * viewBoxSize.w / viewBoxSize.h,
                 h: height
-            )) ?? viewBoxSize
+            )
         default:
             return viewBoxSize
         }
+    }
+
+    var allowsIntrinsicSizeFallback: Bool {
+        return isValidAbsoluteDimension(svgSize.width) && isValidAbsoluteDimension(svgSize.height)
     }
 
     func computeSize(parent: Size) -> Size {
@@ -128,5 +135,10 @@ class SVGNodeLayout: NodeLayout {
             return nil
         }
         return size
+    }
+
+    private func isValidAbsoluteDimension(_ length: SVGLength) -> Bool {
+        guard case let .pixels(value) = length else { return true }
+        return value.isFinite && value > 0
     }
 }

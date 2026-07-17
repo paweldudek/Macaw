@@ -121,6 +121,32 @@ class SVGParserTest: XCTestCase {
         XCTAssertEqual(node.intrinsicSize?.h, 16)
     }
 
+    func testZeroAbsoluteDimensionsDoNotFallBackToViewBoxForIntrinsicSize() throws {
+        let node = try SVGParser.parse(text: """
+        <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" viewBox="0 0 120 32">
+          <rect width="120" height="32"/>
+        </svg>
+        """)
+
+        XCTAssertNil(node.intrinsicSize)
+    }
+
+    func testSingleZeroAbsoluteDimensionDoesNotUseViewBoxAspectRatioForIntrinsicSize() throws {
+        let zeroWidthNode = try SVGParser.parse(text: """
+        <svg xmlns="http://www.w3.org/2000/svg" width="0" viewBox="0 0 120 32">
+          <rect width="120" height="32"/>
+        </svg>
+        """)
+        let zeroHeightNode = try SVGParser.parse(text: """
+        <svg xmlns="http://www.w3.org/2000/svg" height="0" viewBox="0 0 120 32">
+          <rect width="120" height="32"/>
+        </svg>
+        """)
+
+        XCTAssertNil(zeroWidthNode.intrinsicSize)
+        XCTAssertNil(zeroHeightNode.intrinsicSize)
+    }
+
     private func flatten(_ node: Node) -> [Node] {
         if let group = node as? Group {
             return [group] + group.contents.flatMap(flatten)
