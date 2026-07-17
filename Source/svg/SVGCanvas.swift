@@ -31,7 +31,7 @@ public class SVGCanvas: Group {
     }
 
     public override var intrinsicSize: Size? {
-        return layout.intrinsicSize ?? (layout.allowsIntrinsicSizeFallback ? super.bounds?.size() : nil)
+        return layout.intrinsicSize ?? (layout.hasValidDimensions ? super.bounds?.size() : nil)
     }
 
 }

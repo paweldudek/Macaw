@@ -41,7 +41,7 @@ class SVGSize {
 protocol NodeLayout {
 
     var intrinsicSize: Size? { get }
-    var allowsIntrinsicSizeFallback: Bool { get }
+    var hasValidDimensions: Bool { get }
 
     func computeSize(parent: Size) -> Size
 
@@ -65,6 +65,7 @@ class SVGNodeLayout: NodeLayout {
     }
 
     var intrinsicSize: Size? {
+        guard hasValidDimensions else { return nil }
         let viewBoxSize = validSize(viewBox?.size())
 
         switch (svgSize.width, svgSize.height) {
@@ -73,24 +74,24 @@ class SVGNodeLayout: NodeLayout {
         case let (.pixels(width), _):
             guard width.isFinite, width > 0 else { return nil }
             guard let viewBoxSize = viewBoxSize else { return nil }
-            return Size(
+            return validSize(Size(
                 w: width,
                 h: width * viewBoxSize.h / viewBoxSize.w
-            )
+            ))
         case let (_, .pixels(height)):
             guard height.isFinite, height > 0 else { return nil }
             guard let viewBoxSize = viewBoxSize else { return nil }
-            return Size(
+            return validSize(Size(
                 w: height * viewBoxSize.w / viewBoxSize.h,
                 h: height
-            )
+            ))
         default:
             return viewBoxSize
         }
     }
 
-    var allowsIntrinsicSizeFallback: Bool {
-        return isValidAbsoluteDimension(svgSize.width) && isValidAbsoluteDimension(svgSize.height)
+    var hasValidDimensions: Bool {
+        return isValidDimension(svgSize.width) && isValidDimension(svgSize.height)
     }
 
     func computeSize(parent: Size) -> Size {
@@ -137,8 +138,14 @@ class SVGNodeLayout: NodeLayout {
         return size
     }
 
-    private func isValidAbsoluteDimension(_ length: SVGLength) -> Bool {
-        guard case let .pixels(value) = length else { return true }
+    private func isValidDimension(_ length: SVGLength) -> Bool {
+        let value: Double
+        switch length {
+        case let .percent(percent):
+            value = percent
+        case let .pixels(pixels):
+            value = pixels
+        }
         return value.isFinite && value > 0
     }
 }
