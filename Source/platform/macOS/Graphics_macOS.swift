@@ -11,6 +11,41 @@ import Foundation
 #if os(OSX)
 import AppKit
 
+private final class MGraphicsImageContextState: NSObject {
+    var scales = [CGFloat]()
+}
+
+private enum MGraphicsImageContextScaleStack {
+    private static let threadDictionaryKey = "com.exyte.Macaw.image-context-scale-stack"
+
+    static var current: CGFloat? {
+        state?.scales.last
+    }
+
+    static func push(_ scale: CGFloat) {
+        let state = state ?? {
+            let state = MGraphicsImageContextState()
+            Thread.current.threadDictionary[threadDictionaryKey] = state
+            return state
+        }()
+        state.scales.append(scale)
+    }
+
+    static func pop() {
+        guard let state else {
+            return
+        }
+        state.scales.removeLast()
+        if state.scales.isEmpty {
+            Thread.current.threadDictionary.removeObject(forKey: threadDictionaryKey)
+        }
+    }
+
+    private static var state: MGraphicsImageContextState? {
+        Thread.current.threadDictionary[threadDictionaryKey] as? MGraphicsImageContextState
+    }
+}
+
 func MGraphicsGetCurrentContext() -> CGContext? {
     return NSGraphicsContext.current?.cgContext
 }
@@ -60,23 +95,25 @@ func MGraphicsBeginImageContextWithOptions(_ size: CGSize, _ opaque: Bool, _ sca
 
         ctx.concatenate(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: CGFloat(height)))
         ctx.scaleBy(x: scale, y: scale)
-        ctx.scale = scale
         MGraphicsPushContext(ctx)
+        MGraphicsImageContextScaleStack.push(scale)
     }
 }
 
 func MGraphicsGetImageFromCurrentImageContext() -> MImage? {
     guard let ctx = MGraphicsGetCurrentContext(),
+          let scale = MGraphicsImageContextScaleStack.current,
+          scale > 0,
           let theCGImage = ctx.makeImage() else {
         return nil
     }
-    let scale = ctx.scale
     let size = CGSize(width: CGFloat(ctx.width) / scale, height: CGFloat(ctx.height) / scale)
     let image = NSImage(cgImage: theCGImage, size: size)
     return image
 }
 
 func MGraphicsEndImageContext() {
+    MGraphicsImageContextScaleStack.pop()
     MGraphicsPopContext()
 }
 
