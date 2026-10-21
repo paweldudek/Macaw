@@ -48,5 +48,51 @@ final class SVGLifetimeTests: XCTestCase {
         }
         XCTAssertEqual(images.count, 70)
     }
+
+    @MainActor
+    func testReleasingAnSVGViewReleasesItsSceneGraph() {
+        weak var releasedNode: Node?
+        weak var releasedView: SVGView?
+        autoreleasepool {
+            let node = Group(contents: [Shape(form: Rect(w: 16, h: 16), fill: Color.red)])
+            let view = SVGView(node: node, frame: CGRect(x: 0, y: 0, width: 16, height: 16))
+            releasedNode = node
+            releasedView = view
+        }
+        XCTAssertNil(releasedView)
+        XCTAssertNil(releasedNode, "Releasing a view must release its source scene graph")
+    }
+
+    @MainActor
+    func testReplacingAnSVGViewsNodeReleasesThePreviousSceneGraph() {
+        weak var releasedNode: Node?
+        var view: SVGView!
+        autoreleasepool {
+            let node = Group(contents: [Shape(form: Rect(w: 16, h: 16), fill: Color.red)])
+            view = SVGView(node: node, frame: CGRect(x: 0, y: 0, width: 16, height: 16))
+            releasedNode = node
+        }
+        autoreleasepool {
+            view.node = Group(contents: [Shape(form: Rect(w: 16, h: 16), fill: Color.blue)])
+        }
+        XCTAssertNotNil(view.node)
+        XCTAssertNil(releasedNode, "Replacing a view's node must release its previous scene graph")
+    }
+
+    @MainActor
+    func testReplacingAMacawViewsNodeReleasesThePreviousSceneGraph() {
+        weak var releasedNode: Node?
+        var view: MacawView!
+        autoreleasepool {
+            let node = Group(contents: [Shape(form: Rect(w: 16, h: 16), fill: Color.red)])
+            view = MacawView(node: node, frame: CGRect(x: 0, y: 0, width: 16, height: 16))
+            releasedNode = node
+        }
+        autoreleasepool {
+            view.node = Group(contents: [Shape(form: Rect(w: 16, h: 16), fill: Color.blue)])
+        }
+        XCTAssertNotNil(view.node)
+        XCTAssertNil(releasedNode, "Replacing a view's node must release every previous renderer")
+    }
 }
 #endif

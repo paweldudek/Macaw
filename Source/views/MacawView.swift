@@ -210,7 +210,6 @@ internal class DrawingView: MView {
     open var node: Node = Group() {
         didSet {
             layoutHelper.nodeChanged()
-            self.renderer?.dispose()
             self.renderer = RenderUtils.createNodeRenderer(node, view: self)
 
             if let _ = superview {
@@ -284,7 +283,17 @@ internal class DrawingView: MView {
     var recognizersMap = [MGestureRecognizer: [Node]]()
 
     var context: RenderContext!
-    var renderer: NodeRenderer?
+    var renderer: NodeRenderer? {
+        willSet {
+            if renderer !== newValue {
+                renderer?.dispose()
+            }
+        }
+    }
+
+    deinit {
+        renderer?.dispose()
+    }
 
     var toRender = true
     var frameSetFirstTime = false
