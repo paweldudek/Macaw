@@ -137,6 +137,7 @@ public extension Node {
 
     func toNativeImage(size: Size, layout: ContentLayout = .of(), scale: CGFloat = 1) -> MImage {
         let renderer = RenderUtils.createNodeRenderer(self, view: nil)
+        defer { renderer.dispose() }
         let rect = size.rect()
 
         MGraphicsBeginImageContextWithOptions(size.toCG(), false, scale)
