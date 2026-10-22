@@ -134,7 +134,7 @@ class NodeRenderer {
 
         // draw masked image
         if let mask = node.mask, let bounds = mask.bounds {
-            context.draw(getMaskedImage(bounds: bounds), in: bounds.toCG())
+            context.draw(getMaskedImage(bounds: bounds, context: context), in: bounds.toCG())
             return
         }
 
@@ -215,7 +215,7 @@ class NodeRenderer {
             }
         }
 
-        let shapeImage = CIImage(cgImage: renderToImage(bounds: bounds, inset: inset, coloringMode: coloringMode).cgImage!)
+        let shapeImage = CIImage(cgImage: renderToImage(bounds: bounds, inset: inset, coloringMode: coloringMode, scale: rasterScale(in: context)).cgImage!)
 
         var filteredImage = shapeImage
         for effect in effects {
@@ -253,8 +253,17 @@ class NodeRenderer {
         return filter.outputImage!
     }
 
-    func renderToImage(bounds: Rect, inset: Double = 0, coloringMode: ColoringMode = .rgb) -> MImage {
-        let screenScale: CGFloat = MMainScreen()?.mScale ?? 1.0
+    /// Viewless callers derive bitmap density from their destination, never from a UI screen.
+    func rasterScale(in context: CGContext) -> CGFloat? {
+        guard view == nil else { return nil }
+        let transform = context.ctm
+        let scale = max(hypot(transform.a, transform.b), hypot(transform.c, transform.d))
+        return scale.isFinite && scale > 0 ? scale : 1
+    }
+
+    func renderToImage(bounds: Rect, inset: Double = 0, coloringMode: ColoringMode = .rgb,
+                       scale: CGFloat? = nil) -> MImage {
+        let screenScale: CGFloat = scale ?? MMainScreen()?.mScale ?? 1.0
         MGraphicsBeginImageContextWithOptions(CGSize(width: bounds.w + inset, height: bounds.h + inset), false, screenScale)
         let tempContext = MGraphicsGetCurrentContext()!
 
@@ -334,11 +343,13 @@ class NodeRenderer {
         RenderUtils.toBezierPath(clip).addClip()
     }
 
-    private func getMaskedImage(bounds: Rect) -> CGImage {
+    private func getMaskedImage(bounds: Rect, context: CGContext) -> CGImage {
         let mask = node.mask!
-        let image = renderToImage(bounds: bounds)
+        let scale = rasterScale(in: context)
+        let image = renderToImage(bounds: bounds, scale: scale)
         let nodeRenderer = RenderUtils.createNodeRenderer(mask, view: .none)
-        let maskImage = nodeRenderer.renderToImage(bounds: bounds, coloringMode: .greyscale)
+        defer { nodeRenderer.dispose() }
+        let maskImage = nodeRenderer.renderToImage(bounds: bounds, coloringMode: .greyscale, scale: scale)
         return apply(maskImage: maskImage, to: image)
     }
 

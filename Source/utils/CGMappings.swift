@@ -135,6 +135,23 @@ public extension CGAffineTransform {
 
 public extension Node {
 
+    /// Draws into a caller-owned context without constructing a view or an intermediate bitmap.
+    ///
+    /// The caller supplies a coordinate system compatible with the node's top-left layout. Drawing
+    /// preserves the graphics state and existing pixels outside the node. Raster effects and embedded
+    /// images retain their usual rendering behavior; ordinary paths remain vector content in PDF.
+    /// Concurrent callers must own independent node trees and contexts and must not mutate them during drawing.
+    func render(in context: CGContext, size: Size, layout: ContentLayout = .of()) {
+        guard size.w.isFinite, size.h.isFinite, size.w > 0, size.h > 0 else { return }
+        context.saveGState()
+        defer { context.restoreGState() }
+        let renderer = RenderUtils.createNodeRenderer(self, view: nil)
+        defer { renderer.dispose() }
+        context.concatenate(LayoutHelper.calcTransform(self, layout, size).toCG())
+        // NodeRenderer applies the root node's opacity itself.
+        renderer.render(in: context, force: false, opacity: 1)
+    }
+
     func toNativeImage(size: Size, layout: ContentLayout = .of(), scale: CGFloat = 1) -> MImage {
         let renderer = RenderUtils.createNodeRenderer(self, view: nil)
         defer { renderer.dispose() }

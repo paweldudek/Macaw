@@ -84,10 +84,10 @@ open class Shape: Node {
     }
 
     fileprivate func createContext() -> CGContext? {
-        let screenScale: CGFloat = MMainScreen()?.mScale ?? 1.0
+        // Path bounds are logical geometry and do not depend on a display or its pixel density.
         let smallSize = CGSize(width: 1.0, height: 1.0)
 
-        MGraphicsBeginImageContextWithOptions(smallSize, false, screenScale)
+        MGraphicsBeginImageContextWithOptions(smallSize, false, 1)
 
         return MGraphicsGetCurrentContext()
     }
