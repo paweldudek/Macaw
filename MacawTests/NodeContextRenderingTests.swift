@@ -63,6 +63,17 @@ final class NodeContextRenderingTests: XCTestCase {
         }
     }
 
+    func testDrawingDoesNotRetainTheSceneGraph() throws {
+        let context = try bitmap()
+        weak var releasedNode: Node?
+        autoreleasepool {
+            let node = Group(contents: [Shape(form: Rect(w: 32, h: 32), fill: Color.red)])
+            releasedNode = node
+            for _ in 0..<10 { node.render(in: context, size: Size(w: 32, h: 32)) }
+        }
+        XCTAssertNil(releasedNode, "The caller-owned context must not retain temporary renderers or their tree")
+    }
+
     private func bitmap() throws -> CGContext {
         try XCTUnwrap(CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8,
             bytesPerRow: 128, space: CGColorSpaceCreateDeviceRGB(),

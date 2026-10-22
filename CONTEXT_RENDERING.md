@@ -21,6 +21,6 @@ Concurrent calls require independent node trees and contexts. Do not mutate a tr
 or share a live view's tree with a worker. This is a drawing API, not a synchronization or animation
 ownership mechanism.
 
-Validation: `swift test --filter 'NodeContextRenderingTests|GraphicsContextConcurrencyTests'` covers
+Validation: `swift test --filter 'NodeContextRenderingTests|GraphicsContextConcurrencyTests|SVGLifetimeTests'` covers
 existing destination pixels, transform preservation, root opacity, PDF image resources, independent
-worker rendering, and the existing nested/concurrent native image contexts.
+worker rendering, temporary scene-graph release, and the existing native-context and SVG lifetime checks.

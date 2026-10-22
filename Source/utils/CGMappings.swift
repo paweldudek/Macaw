@@ -146,6 +146,7 @@ public extension Node {
         context.saveGState()
         defer { context.restoreGState() }
         let renderer = RenderUtils.createNodeRenderer(self, view: nil)
+        defer { renderer.dispose() }
         context.concatenate(LayoutHelper.calcTransform(self, layout, size).toCG())
         // NodeRenderer applies the root node's opacity itself.
         renderer.render(in: context, force: false, opacity: 1)
