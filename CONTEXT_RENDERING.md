@@ -15,7 +15,9 @@ context.restoreGState()
 
 The method preserves the caller's graphics state and does not clear the destination. The root node's
 opacity is applied once. Normal shapes remain vector PDF content; embedded images, masks and raster
-effects retain their existing behavior. Existing `toNativeImage` behavior is unchanged.
+effects use destination-transform pixel density for viewless rendering. View-backed renderers retain
+their existing screen-density policy. Mask and pattern renderers release their temporary scene graphs.
+Logical shape bounds do not consult a display.
 
 Concurrent calls require independent node trees and contexts. Do not mutate a tree while drawing it
 or share a live view's tree with a worker. This is a drawing API, not a synchronization or animation
@@ -23,4 +25,4 @@ ownership mechanism.
 
 Validation: `swift test --filter 'NodeContextRenderingTests|GraphicsContextConcurrencyTests|SVGLifetimeTests'` covers
 existing destination pixels, transform preservation, root opacity, PDF image resources, independent
-worker rendering, temporary scene-graph release, and the existing native-context and SVG lifetime checks.
+worker rendering (including masks), destination-resolution mask output, temporary scene-graph release, and the existing native-context and SVG lifetime checks.
