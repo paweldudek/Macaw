@@ -94,6 +94,109 @@ final class SVGClippingTests: XCTestCase {
         try assertTransparent(image, at: [(65, 50), (75, 50)])
     }
 
+    func testBoundingBoxClipUsesGeometryBeforeDescendantClipping() throws {
+        let image = try render("""
+        <defs>
+          <clipPath id="half" clipPathUnits="objectBoundingBox"><rect width="0.5" height="1"/></clipPath>
+          <clipPath id="inner"><rect width="50" height="100"/></clipPath>
+        </defs>
+        <g clip-path="url(#half)"><g clip-path="url(#inner)">
+          <rect width="100" height="100" fill="blue"/>
+        </g></g>
+        """)
+        try assertOpaque(image, at: [(10, 50), (40, 50)])
+        try assertTransparent(image, at: [(60, 50), (90, 50)])
+    }
+
+    func testBoundingBoxClipPreservesNestedTransformsBeforeClipping() throws {
+        let image = try render("""
+        <defs>
+          <clipPath id="half" clipPathUnits="objectBoundingBox"><rect width="0.5" height="1"/></clipPath>
+          <clipPath id="inner"><rect width="50" height="100"/></clipPath>
+        </defs>
+        <g transform="translate(10 0) scale(0.8)" clip-path="url(#half)">
+          <g transform="translate(10 0)"><g clip-path="url(#inner)">
+            <rect width="100" height="100" fill="blue"/>
+          </g></g>
+        </g>
+        """)
+        try assertOpaque(image, at: [(25, 50), (50, 50)])
+        try assertTransparent(image, at: [(10, 50), (65, 50)])
+    }
+
+    func testBoundingBoxClipExcludesStrokeFromGeometry() throws {
+        let image = try render("""
+        <defs><clipPath id="quarter" clipPathUnits="objectBoundingBox"><rect width="0.25" height="1"/></clipPath></defs>
+        <g clip-path="url(#quarter)"><rect x="10" y="10" width="80" height="80" fill="blue" stroke="blue" stroke-width="20"/></g>
+        """)
+        try assertOpaque(image, at: [(15, 50), (28, 50)])
+        try assertTransparent(image, at: [(5, 50), (35, 50)])
+    }
+
+    func testCompoundClipPreservesChildTranslations() throws {
+        let image = try render("""
+        <defs><clipPath id="all">
+          <rect width="50" height="100"/>
+          <rect width="50" height="100" transform="translate(50 0)"/>
+        </clipPath></defs>
+        <rect width="100" height="100" fill="blue" clip-path="url(#all)"/>
+        """)
+        try assertOpaque(image, at: [(10, 50), (40, 50), (60, 50), (90, 50)])
+    }
+
+    func testCompoundClipPreservesChildRotationAndCurves() throws {
+        let image = try render("""
+        <defs><clipPath id="parts">
+          <rect width="20" height="50" transform="translate(80 10) rotate(90)"/>
+          <circle r="15" transform="translate(75 65)"/>
+        </clipPath></defs>
+        <rect width="100" height="100" fill="blue" clip-path="url(#parts)"/>
+        """)
+        try assertOpaque(image, at: [(50, 20), (75, 65)])
+        try assertTransparent(image, at: [(10, 20), (50, 65), (90, 90)])
+    }
+
+    func testCompoundClipKeepsReflectedOverlapFilledForEitherChildOrder() throws {
+        for shapes in [
+            "<rect width=\"60\" height=\"100\"/><rect width=\"60\" height=\"100\" transform=\"translate(100 0) scale(-1 1)\"/>",
+            "<rect width=\"60\" height=\"100\" transform=\"translate(100 0) scale(-1 1)\"/><rect width=\"60\" height=\"100\"/>"
+        ] {
+            let image = try render("""
+            <defs><clipPath id="all">\(shapes)</clipPath></defs>
+            <rect width="100" height="100" fill="blue" clip-path="url(#all)"/>
+            """)
+            try assertOpaque(image, at: [(10, 50), (50, 50), (90, 50)])
+        }
+    }
+
+    func testCompoundClipPreservesReflectedChildWindingHole() throws {
+        let image = try render("""
+        <defs><clipPath id="parts">
+          <rect width="10" height="100"/>
+          <path d="M10 10H60V90H10Z M20 30V70H40V30Z" transform="translate(100 0) scale(-1 1)"/>
+        </clipPath></defs>
+        <rect width="100" height="100" fill="blue" clip-path="url(#parts)"/>
+        """)
+        try assertOpaque(image, at: [(5, 50), (50, 50), (85, 50)])
+        try assertTransparent(image, at: [(20, 50), (70, 50)])
+    }
+
+    func testBoundingBoxClipAccumulatesNestedRotationsBeforeMeasuringGeometry() throws {
+        let image = try render("""
+        <defs>
+          <clipPath id="half" clipPathUnits="objectBoundingBox"><rect width="0.5" height="1"/></clipPath>
+          <clipPath id="inner"><rect width="50" height="100"/></clipPath>
+        </defs>
+        <g clip-path="url(#half)"><g transform="rotate(45 50 50)">
+          <g transform="rotate(-45 50 50)" clip-path="url(#inner)">
+            <rect width="100" height="100" fill="blue"/>
+          </g>
+        </g></g>
+        """)
+        try assertOpaque(image, at: [(10, 50), (40, 50)])
+        try assertTransparent(image, at: [(60, 50), (90, 50)])
+    }
+
     func testUnclippedShapeRemainsUnclipped() throws {
         let image = try render("<rect width=\"100\" height=\"100\" fill=\"blue\"/>")
         try assertOpaque(image, at: [(10, 10), (90, 90), (50, 50)])

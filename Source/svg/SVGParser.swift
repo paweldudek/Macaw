@@ -530,7 +530,31 @@ open class SVGParser {
             }
         }
         let result = Group(contents: groupNodes, place: getPosition(element), tag: getTag(element))
-        result.clip = getClipPath(style, locus: result.bounds)
+        if style["clip-path"] != nil {
+            result.clip = getClipPath(style, locus: unclippedBounds(groupNodes))
+        }
+        return result
+    }
+
+    // objectBoundingBox uses descendant geometry before clipping, masking, or stroke expansion.
+    // Accumulate transforms to the owning group's coordinates without changing shared nodes or their bounds.
+    fileprivate func unclippedBounds(_ nodes: [Node], transform: Transform = .identity) -> Rect? {
+        var result: Rect?
+        for node in nodes {
+            let placement = transform.concat(with: node.place)
+            let bounds: Rect?
+            if let group = node as? Group {
+                bounds = unclippedBounds(group.contents, transform: placement)
+            } else if let shape = node as? Shape {
+                var cgTransform = placement.toCG()
+                bounds = shape.form.toCGPath().copy(using: &cgTransform)?.boundingBoxOfPath.toMacaw()
+            } else {
+                bounds = node.bounds?.applying(placement)
+            }
+            guard let bounds = bounds,
+                  bounds.x.isFinite, bounds.y.isFinite, bounds.w.isFinite, bounds.h.isFinite else { continue }
+            result = result?.union(rect: bounds) ?? bounds
+        }
         return result
     }
 
@@ -1358,10 +1382,21 @@ open class SVGParser {
         var path: Path? = .none
         try clip.children.forEach { indexer in
             if let shape = try parseNode(indexer) as? Shape {
+                var child = RenderUtils.toBezierPath(shape.form)
+                child.apply(shape.place.toCG())
+                if shape.place.m11 * shape.place.m22 - shape.place.m12 * shape.place.m21 < 0 {
+                    // Reflections must not reverse a child's contribution and cut holes in overlaps.
+                    #if os(OSX)
+                    child = child.reversed
+                    #else
+                    child = child.reversing()
+                    #endif
+                }
+                let segments = child.toMacaw().segments
                 if let p = path {
-                    path = Path(segments: p.segments + shape.form.toPath().segments, fillRule: p.fillRule)
+                    path = Path(segments: p.segments + segments, fillRule: p.fillRule)
                 } else {
-                    path = Path(segments: shape.form.toPath().segments)
+                    path = Path(segments: segments)
                 }
             }
         }
