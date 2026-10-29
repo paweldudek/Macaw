@@ -59,6 +59,41 @@ final class SVGClippingTests: XCTestCase {
         try assertOpaque(image, at: [(20, 50), (80, 50)])
     }
 
+    func testGroupClipRemainsInGroupCoordinatesWhenChildIsTranslated() throws {
+        let image = try render("""
+        <defs><clipPath id="clip"><rect x="20" y="20" width="60" height="60"/></clipPath></defs>
+        <g clip-path="url(#clip)"><rect width="100" height="100" fill="blue" transform="translate(50 0)"/></g>
+        """)
+        try assertTransparent(image, at: [(40, 50), (90, 50)])
+        try assertOpaque(image, at: [(60, 50)])
+    }
+
+    func testParsedNestedGroupClipsIntersect() throws {
+        let image = try render("""
+        <defs>
+          <clipPath id="outer"><rect x="20" y="20" width="60" height="60"/></clipPath>
+          <clipPath id="inner"><rect x="40" y="0" width="60" height="100"/></clipPath>
+        </defs>
+        <g clip-path="url(#outer)"><g clip-path="url(#inner)">
+          <rect width="100" height="100" fill="blue"/>
+        </g></g>
+        """)
+        try assertTransparent(image, at: [(30, 50), (90, 50), (50, 10)])
+        try assertOpaque(image, at: [(50, 50)])
+    }
+
+    func testGroupBoundingBoxClipUsesWholeGroupBounds() throws {
+        let image = try render("""
+        <defs><clipPath id="clip" clipPathUnits="objectBoundingBox"><rect width="0.5" height="1"/></clipPath></defs>
+        <g clip-path="url(#clip)">
+          <rect x="20" y="20" width="20" height="60" fill="blue"/>
+          <rect x="60" y="20" width="20" height="60" fill="blue"/>
+        </g>
+        """)
+        try assertOpaque(image, at: [(25, 50), (35, 50)])
+        try assertTransparent(image, at: [(65, 50), (75, 50)])
+    }
+
     func testUnclippedShapeRemainsUnclipped() throws {
         let image = try render("<rect width=\"100\" height=\"100\" fill=\"blue\"/>")
         try assertOpaque(image, at: [(10, 10), (90, 90), (50, 50)])

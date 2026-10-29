@@ -520,13 +520,18 @@ open class SVGParser {
         guard let element = group.element else {
             return .none
         }
+        // A clip belongs to this group's coordinate system; it is not inherited by its children.
+        var childStyle = style
+        childStyle.removeValue(forKey: "clip-path")
         var groupNodes: [Node] = []
         try group.children.forEach { child in
-            if let node = try parseNode(child, groupStyle: style, ancestorClasses: ancestorClasses) {
+            if let node = try parseNode(child, groupStyle: childStyle, ancestorClasses: ancestorClasses) {
                 groupNodes.append(node)
             }
         }
-        return Group(contents: groupNodes, place: getPosition(element), tag: getTag(element))
+        let result = Group(contents: groupNodes, place: getPosition(element), tag: getTag(element))
+        result.clip = getClipPath(style, locus: result.bounds)
+        return result
     }
 
     fileprivate func getPosition(_ element: SWXMLHash.XMLElement) -> Transform {
