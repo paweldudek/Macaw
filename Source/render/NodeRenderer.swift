@@ -321,17 +321,17 @@ class NodeRenderer {
             return
         }
 
-        MGraphicsPushContext(context)
-        defer {
-            MGraphicsPopContext()
-        }
-
         if let rect = clip as? Rect {
             context.clip(to: CGRect(x: rect.x, y: rect.y, width: rect.w, height: rect.h))
             return
         }
 
-        RenderUtils.toBezierPath(clip).addClip()
+        // NSGraphicsContext push/pop restores graphics state on macOS, including the clip.
+        // Apply directly so it remains active until render(in:) restores the node's state.
+        let path = RenderUtils.toBezierPath(clip)
+        context.beginPath()
+        context.addPath(path.cgPath)
+        context.clip(using: path.mUsesEvenOddFillRule ? .evenOdd : .winding)
     }
 
     private func getMaskedImage(bounds: Rect) -> CGImage {
