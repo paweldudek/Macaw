@@ -80,6 +80,7 @@ class RenderUtils {
     }
 
     class func toCGPath(_ locus: Locus) -> CGPath {
+        if let clip = locus as? SVGClip { return clip.geometryPath }
         if let arc = locus as? Arc {
             if arc.ellipse.rx != arc.ellipse.ry {
                 // http://stackoverflow.com/questions/11365775/how-to-draw-an-elliptical-arc-with-coregraphics
@@ -100,6 +101,7 @@ class RenderUtils {
     }
 
     class func toBezierPath(_ locus: Locus) -> MBezierPath {
+        if let clip = locus as? SVGClip { return toBezierPath(clip.toPath()) }
         if let round = locus as? RoundRect {
             let corners = CGSize(width: CGFloat(round.rx), height: CGFloat(round.ry))
             return MBezierPath(roundedRect: round.rect.toCG(), byRoundingCorners:
@@ -578,6 +580,10 @@ class RenderUtils {
     internal class func setClip(_ clip: Locus?, ctx: CGContext) {
         if let rect = clip as? Rect {
             ctx.clip(to: CGRect(x: rect.x, y: rect.y, width: rect.w, height: rect.h))
+        } else if clip is SVGClip {
+            // This helper is used by Shape.bounds. Clipping here would consume the geometry
+            // that the caller is about to measure; drawing applies the real clip separately.
+            return
         } else if let clip = clip {
             RenderUtils.toBezierPath(clip).addClip()
         }

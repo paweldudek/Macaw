@@ -275,6 +275,14 @@ class LocusSerializer {
                 shift: parse(dictionary["shift"]),
                 extent: parse(dictionary["extent"]))
         }
+        factories["SVGClip"] = { dictionary in
+            let children = dictionary["children"] as! [[String: Any]]
+            return SVGClip(children.map { child in
+                SVGClip.Part(self.instance(dictionary: child["form"] as! [String: Any]),
+                             place: Transform(string: child["place"] as! String),
+                             rule: child["rule"] as? String == "evenodd" ? .evenOdd : .winding)
+            })
+        }
         factories["Circle"] = { dictionary in
             Circle(cx: parse(dictionary["cx"]),
                    cy: parse(dictionary["cy"]),
@@ -328,6 +336,15 @@ class LocusSerializer {
     func instance(dictionary: [String:Any]) -> Locus {
         let type = dictionary["type"] as! String
         return factories[type]!(dictionary)
+    }
+}
+
+extension SVGClip: Serializable {
+    func toDictionary() -> [String: Any] {
+        return ["type": "SVGClip", "children": parts.map {
+            ["form": ($0.form as! Serializable).toDictionary(), "place": $0.place.toString(),
+             "rule": $0.rule == .evenOdd ? "evenodd" : "nonzero"] as [String: Any]
+        }]
     }
 }
 

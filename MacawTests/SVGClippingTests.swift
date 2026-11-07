@@ -181,6 +181,173 @@ final class SVGClippingTests: XCTestCase {
         try assertTransparent(image, at: [(20, 50), (70, 50)])
     }
 
+    func testCompoundClipUnionsIndependentlyWoundChildrenInEitherOrder() throws {
+        let left = #"<path d="M10 15H60V85H10Z"/>"#
+        let right = #"<path d="M40 15V85H90V15Z"/>"#
+        for children in [left + right, right + left] {
+            let image = try render("""
+            <defs><clipPath id="c">\(children)</clipPath></defs>
+            <rect width="100" height="100" fill="blue" clip-path="url(#c)"/>
+            """)
+            try assertOpaque(image, at: [(15, 50), (50, 50), (85, 50)])
+            try assertTransparent(image, at: [(5, 50), (50, 5)])
+        }
+    }
+
+    func testClipRuleControlsEachSilhouetteBeforeUnion() throws {
+        let rings = "M10 10H90V90H10Z M30 30H70V70H30Z"
+        for (parent, child) in [("", #"clip-rule="evenodd""#), (#"clip-rule="evenodd""#, "")] {
+            for extra in ["", #"<rect x="46" y="46" width="8" height="8"/>"#] {
+                let image = try render("""
+                <defs><clipPath id="c" \(parent)><path \(child) d="\(rings)"/>\(extra)</clipPath></defs>
+                <rect width="100" height="100" fill="blue" clip-path="url(#c)"/>
+                """)
+                try assertOpaque(image, at: [(15, 50), (85, 50)])
+                try assertTransparent(image, at: [(40, 50)])
+                if extra.isEmpty { try assertTransparent(image, at: [(50, 50)]) }
+                else { try assertOpaque(image, at: [(50, 50)]) }
+            }
+        }
+    }
+
+    func testTextDefinesASilhouetteAloneAndBesideAShape() throws {
+        let glyph = #"<text x="42" y="70" font-size="70" font-family="Helvetica">H</text>"#
+        for extra in ["", #"<rect x="10" width="15" height="100"/>"#] {
+            let image = try render("""
+            <defs><clipPath id="c">\(extra)\(glyph)</clipPath></defs>
+            <rect width="100" height="100" fill="blue" clip-path="url(#c)"/>
+            """)
+            try assertOpaque(image, at: [(50, 50), (85, 50)])
+            try assertTransparent(image, at: [(3, 50), (65, 60)])
+            if extra.isEmpty { try assertTransparent(image, at: [(15, 50)]) }
+            else { try assertOpaque(image, at: [(15, 50)]) }
+        }
+    }
+
+    func testReferencedClipGeometryKeepsItsOwnRuleAndTransform() throws {
+        let image = try render("""
+        <defs xmlns:xlink="http://www.w3.org/1999/xlink">
+          <path id="p" clip-rule="evenodd" d="M0 10H80V90H0Z M20 30H60V70H20Z"/>
+          <clipPath id="c"><use xlink:href="#p" x="10"/><rect width="5" height="5"/></clipPath>
+        </defs>
+        <rect width="100" height="100" fill="blue" clip-path="url(#c)"/>
+        """)
+        try assertOpaque(image, at: [(15, 50), (85, 50)])
+        try assertTransparent(image, at: [(5, 50), (50, 50)])
+    }
+
+    func testForwardReferencedClipUsesTheWinningClipRuleDeclaration() throws {
+        let image = try render("""
+        <defs>
+          <clipPath id="c"><use href="#p"/></clipPath>
+          <path id="p" clip-rule="nonzero" style="clip-rule:evenodd" d="M10 10H90V90H10Z M30 30H70V70H30Z"/>
+        </defs>
+        <rect width="100" height="100" fill="blue" clip-path="url(#c)"/>
+        """)
+        try assertOpaque(image, at: [(15, 50), (85, 50)])
+        try assertTransparent(image, at: [(50, 50)])
+    }
+
+    func testCompoundBoundsAndChildTransformSurviveSVGSerialization() throws {
+        let node = try parse("""
+        <defs><clipPath id="c" clipPathUnits="objectBoundingBox">
+          <rect width="0.2" height="1" transform="translate(0.2 0)"/>
+          <rect x="0.8" width="0.2" height="1"/>
+        </clipPath></defs>
+        <rect x="10" y="20" width="80" height="60" clip-path="url(#c)" fill="blue"/>
+        """)
+        for candidate in [node, try SVGParser.parse(text: SVGSerializer.serialize(node: node))] {
+            let image = try bitmap(candidate, layout: .none)
+            try assertOpaque(image, at: [(34, 50), (82, 50)])
+            try assertTransparent(image, at: [(15, 50), (55, 50), (96, 50)])
+        }
+    }
+
+    func testCompoundClipPreservesFollowingSiblingAndPaintsOverlapOnlyOnce() throws {
+        let image = try render("""
+        <defs><clipPath id="c"><circle cx="38" cy="50" r="24"/><circle cx="62" cy="50" r="24"/></clipPath></defs>
+        <rect width="100" height="100" fill="blue" fill-opacity="0.5" clip-path="url(#c)"/>
+        <rect x="90" y="40" width="8" height="20" fill="red"/>
+        """)
+        for x in [20, 50, 80] {
+            XCTAssertEqual(try XCTUnwrap(image.colorAt(x: x, y: 50)).alphaComponent, 0.5, accuracy: 0.02)
+        }
+        try assertTransparent(image, at: [(6, 50), (50, 10)])
+        try assertOpaque(image, at: [(94, 50)])
+    }
+
+    func testCompoundClipSurvivesPDFRoundTrip() throws {
+        let node = try parse("""
+        <defs><clipPath id="c">
+          <rect x="5" y="10" width="30" height="60"/>
+          <rect x="25" y="10" width="30" height="60"/>
+          <rect x="80" y="10" width="10" height="60"/>
+        </clipPath></defs>
+        <rect width="100" height="100" fill="red"/>
+        <rect width="100" height="100" fill="blue" opacity="0.5" clip-path="url(#c)"/>
+        """)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var box = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let pdf = try XCTUnwrap(CGContext(url as CFURL, mediaBox: &box, nil))
+        let renderer = RenderUtils.createNodeRenderer(node, view: nil)
+        defer { renderer.dispose() }
+        pdf.beginPDFPage(nil)
+        renderer.render(in: pdf, force: true, opacity: 1)
+        pdf.endPDFPage()
+        pdf.closePDF()
+        let document = try XCTUnwrap(CGPDFDocument(url as CFURL))
+        let bitmap = try XCTUnwrap(CGContext(data: nil, width: 100, height: 100, bitsPerComponent: 8,
+            bytesPerRow: 400, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        bitmap.drawPDFPage(try XCTUnwrap(document.page(at: 1)))
+        let pixels = try XCTUnwrap(bitmap.data).assumingMemoryBound(to: UInt8.self)
+        for x in [10, 30, 45, 65, 85, 95] {
+            let offset = 50 * bitmap.bytesPerRow + x * 4
+            if [65, 95].contains(x) {
+                XCTAssertGreaterThan(pixels[offset], 245)
+                XCTAssertLessThan(pixels[offset + 2], 10)
+            } else {
+                XCTAssertEqual(Int(pixels[offset]), 128, accuracy: 8)
+                XCTAssertEqual(Int(pixels[offset + 2]), 128, accuracy: 8)
+            }
+        }
+    }
+
+    func testCompoundClipPreservesShapeGeometryForLayout() throws {
+        let node = try parse("""
+        <defs><clipPath id="c"><rect width="20" height="20"/><circle cx="70" cy="50" r="15"/></clipPath></defs>
+        <rect id="subject" x="5" y="10" width="80" height="60" clip-path="url(#c)"/>
+        """)
+        let shape = try XCTUnwrap(node.nodeBy(predicate: { $0.tag.contains("subject") }) as? Shape)
+        let bounds = try XCTUnwrap(shape.bounds)
+        XCTAssertEqual(bounds.x, 5)
+        XCTAssertEqual(bounds.y, 10)
+        XCTAssertEqual(bounds.w, 80)
+        XCTAssertEqual(bounds.h, 60)
+    }
+
+    func testCoverageMaskUsesIndependentSilhouettesInUserCoordinates() throws {
+        let clip = SVGClip([
+            .init(Rect(x: 5, y: 10, w: 25, h: 30), place: .identity, rule: .winding),
+            .init(Rect(x: 20, y: 10, w: 25, h: 30), place: .identity, rule: .winding),
+            .init(Rect(x: 70, y: 60, w: 15, h: 20), place: .identity, rule: .winding)
+        ])
+        let bitmap = try XCTUnwrap(CGContext(data: nil, width: 200, height: 200, bitsPerComponent: 8,
+            bytesPerRow: 800, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        bitmap.scaleBy(x: 2, y: 2)
+        clip.applyCoverageMask(in: bitmap)
+        bitmap.setFillColor(gray: 1, alpha: 1)
+        bitmap.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        let pixels = try XCTUnwrap(bitmap.data).assumingMemoryBound(to: UInt8.self)
+        for (x,y,alpha) in [(10,20,255),(25,20,255),(40,20,255),(55,20,0),(75,70,255),(75,20,0)] {
+            XCTAssertEqual(Int(pixels[(199-y*2)*bitmap.bytesPerRow+x*2*4+3]), alpha)
+        }
+        if #available(macOS 13, *) {
+            XCTAssertTrue(clip.toCGPath().contains(CGPoint(x: 25, y: 20)))
+            XCTAssertFalse(clip.toPath().toCGPath().contains(CGPoint(x: 55, y: 20)))
+        }
+    }
+
     func testBoundingBoxClipAccumulatesNestedRotationsBeforeMeasuringGeometry() throws {
         let image = try render("""
         <defs>

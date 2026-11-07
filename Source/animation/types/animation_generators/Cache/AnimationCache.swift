@@ -50,9 +50,16 @@ class AnimationUtils {
 
             // Clip
             if let clip = AbsoluteUtils.absoluteClip(renderer) {
-                let maskLayer = CAShapeLayer()
-                maskLayer.path = clip.toCGPath()
-                layer.mask = maskLayer
+                if let svgClip = clip as? SVGClip {
+                    let mask = svgClip.animationMask()
+                    mask.frame = cgRect
+                    mask.bounds = cgRect
+                    layer.mask = mask
+                } else {
+                    let maskLayer = CAShapeLayer()
+                    maskLayer.path = clip.toCGPath()
+                    layer.mask = maskLayer
+                }
             }
         }
 

@@ -1,4 +1,5 @@
 import Foundation
+import CoreText
 
 #if os(iOS)
 import UIKit
@@ -37,7 +38,7 @@ class TextRenderer: NodeRenderer {
     override func doRender(in context: CGContext, force: Bool, opacity: Double, coloringMode: ColoringMode = .rgb) {
 
         let message = text.text
-        let font = getMFont()
+        let font = Self.getMFont(text)
         // positive NSBaselineOffsetAttributeName values don't work, couldn't find why
         // for now move the rect itself
         var attributes: [NSAttributedString.Key: Any] = [NSAttributedString.Key.font: font]
@@ -65,9 +66,35 @@ class TextRenderer: NodeRenderer {
 
         if attributes.count > 1 {
             MGraphicsPushContext(context)
-            message.draw(in: getBounds(font), withAttributes: attributes)
+            message.draw(in: Self.getBounds(text, font: font), withAttributes: attributes)
             MGraphicsPopContext()
         }
+    }
+
+    /// Shape the same font and alignment used for painting, including per-run fallback fonts.
+    static func glyphOutline(for text: Text) -> Path {
+        let font = Self.getMFont(text)
+        var attributes: [NSAttributedString.Key: Any] = [.font: font]
+        if text.kerning != 0 { attributes[.kern] = text.kerning }
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text.text, attributes: attributes))
+        let origin = getBounds(text, font: font).origin
+        let baseline = origin.y + font.ascender
+        let outline = CGMutablePath()
+        for run in CTLineGetGlyphRuns(line) as! [CTRun] {
+            let count = CTRunGetGlyphCount(run)
+            let runFont = (CTRunGetAttributes(run) as NSDictionary)[kCTFontAttributeName] as! CTFont
+            var glyphs = [CGGlyph](repeating: 0, count: count)
+            var positions = [CGPoint](repeating: .zero, count: count)
+            CTRunGetGlyphs(run, CFRange(location: 0, length: 0), &glyphs)
+            CTRunGetPositions(run, CFRange(location: 0, length: 0), &positions)
+            for index in glyphs.indices {
+                guard let glyph = CTFontCreatePathForGlyph(runFont, glyphs[index], nil) else { continue }
+                let offset = positions[index]
+                outline.addPath(glyph, transform: CGAffineTransform(a: 1, b: 0, c: 0, d: -1,
+                    tx: origin.x + offset.x, ty: baseline - offset.y))
+            }
+        }
+        return outline.toMacaw()
     }
 
     override func doFindNodeAt(path: NodePath, ctx: CGContext) -> NodePath? {
@@ -82,7 +109,7 @@ class TextRenderer: NodeRenderer {
         return .none
     }
 
-    fileprivate func getMFont() -> MFont {
+    private static func getMFont(_ text: Text) -> MFont {
         guard #available(iOS 9.0, macOS 10.11, *) else {
             // This case should never happen, since the deployment target is set to iOS 9.0/macOS 10.11.
             // However it is needed for the Swift Package Manager to work accordingly.
@@ -102,7 +129,7 @@ class TextRenderer: NodeRenderer {
         }
     }
 
-    fileprivate func getWeight(_ weight: String) -> MFont.Weight? {
+    private static func getWeight(_ weight: String) -> MFont.Weight? {
         guard #available(iOS 9.0, macOS 10.11, *) else {
             // This case should never happen, since the deployment target is set to iOS 9.0/macOS 10.11.
             // However it is needed for the Swift Package Manager to work accordingly.
@@ -122,7 +149,7 @@ class TextRenderer: NodeRenderer {
         }
     }
 
-    fileprivate func getBounds(_ font: MFont) -> CGRect {
+    private static func getBounds(_ text: Text, font: MFont) -> CGRect {
 
         var textAttributes: [NSAttributedString.Key: Any] = [NSAttributedString.Key.font: font]
         if text.kerning != 0.0 {
@@ -137,7 +164,7 @@ class TextRenderer: NodeRenderer {
                       width: CGFloat(textSize.width), height: CGFloat(textSize.height))
     }
 
-    fileprivate func calculateBaselineOffset(_ text: Text, font: MFont) -> CGFloat {
+    private static func calculateBaselineOffset(_ text: Text, font: MFont) -> CGFloat {
         var baselineOffset = CGFloat(0)
         switch text.baseline {
         case Baseline.alphabetic:
@@ -152,7 +179,7 @@ class TextRenderer: NodeRenderer {
         return -baselineOffset
     }
 
-    fileprivate func calculateAlignmentOffset(_ text: Text, font: MFont) -> CGFloat {
+    private static func calculateAlignmentOffset(_ text: Text, font: MFont) -> CGFloat {
         let textAttributes = [
             NSAttributedString.Key.font: font
         ]

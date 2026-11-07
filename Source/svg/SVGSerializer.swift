@@ -308,7 +308,16 @@ open class SVGSerializer {
 
     fileprivate func addClipToDefs(_ clip: Locus) {
         clipPathCount += 1
-        defs += "<\(SVGClipPathName) id=\"\(SVGClipPathName)\(clipPathCount)\">" + locusToSVG(clip) + SVGGenericCloseTag + "</\(SVGClipPathName)>"
+        let children: String
+        if let svgClip = clip as? SVGClip {
+            children = svgClip.parts.map { part in
+                let rule = part.rule == .evenOdd ? " clip-rule=\"evenodd\"" : ""
+                return locusToSVG(part.placedForm) + rule + SVGGenericCloseTag
+            }.joined()
+        } else {
+            children = locusToSVG(clip) + SVGGenericCloseTag
+        }
+        defs += "<\(SVGClipPathName) id=\"\(SVGClipPathName)\(clipPathCount)\">" + children + "</\(SVGClipPathName)>"
     }
 
     fileprivate var maskCount: Int = 0

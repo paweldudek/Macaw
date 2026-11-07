@@ -283,8 +283,8 @@ class NodeRenderer {
         }
 
         ctx.concatenate(node.place.toCG())
-        applyClip(in: ctx)
         let loc = location.applying(inverted.toCG())
+        guard hitIsInsideClip(at: loc, context: ctx) else { return nil }
         let path = NodePath(node: node, location: loc)
         let result = doFindNodeAt(path: path, ctx: ctx)
         return result
@@ -301,8 +301,8 @@ class NodeRenderer {
         }
 
         ctx.concatenate(node.place.toCG())
-        applyClip(in: ctx)
         let loc = parentNodePath.location.applying(inverted.toCG())
+        guard hitIsInsideClip(at: loc, context: ctx) else { return nil }
         let path = NodePath(node: node, location: loc, parent: parentNodePath)
         let result = doFindNodeAt(path: path, ctx: ctx)
         return result
@@ -316,11 +316,21 @@ class NodeRenderer {
         calculateZPosition(self)
     }
 
+    private func hitIsInsideClip(at point: CGPoint, context: CGContext) -> Bool {
+        if let clip = node.clip as? SVGClip { return clip.contains(point) }
+        applyClip(in: context)
+        return true
+    }
+
     private func applyClip(in context: CGContext) {
         guard let clip = node.clip else {
             return
         }
 
+        if let compound = clip as? SVGClip {
+            compound.apply(in: context)
+            return
+        }
         if let rect = clip as? Rect {
             context.clip(to: CGRect(x: rect.x, y: rect.y, width: rect.w, height: rect.h))
             return
