@@ -101,30 +101,24 @@ class SVGNodeLayout: NodeLayout {
     func layout(node: Node, in size: Size) {
         let svgSizeInPixels = svgSize.toPixels(total: size)
 
-        if let viewBox = self.viewBox {
-            if let rectClip = node.clip as? Rect {
-                if rectClip != viewBox {
-                    node.clip = viewBox
-                }
-            } else {
-                node.clip = viewBox
-            }
-        }
         let viewBox = self.viewBox ?? Rect(x: 0, y: 0, w: svgSizeInPixels.w, h: svgSizeInPixels.h)
-
-        if scaling === AspectRatio.slice {
-            // setup new clipping to slice extra bits
-            let newSize = AspectRatio.meet.fit(size: svgSizeInPixels, into: viewBox)
-            let newX = viewBox.x + xAlign.align(outer: viewBox.w, inner: newSize.w)
-            let newY = viewBox.y + yAlign.align(outer: viewBox.h, inner: newSize.h)
-            node.clip = Rect(x: newX, y: newY, w: newSize.w, h: newSize.h)
+        let clipsToViewport = self.viewBox != nil || scaling === AspectRatio.slice
+        if clipsToViewport && (validSize(viewBox.size()) == nil || validSize(svgSizeInPixels) == nil ||
+                               !viewBox.x.isFinite || !viewBox.y.isFinite) {
+            node.place = .identity
+            if node.clip as? Rect != Rect() { node.clip = Rect() }
+            return
         }
-
         let layout = ContentLayout.of(scaling: scaling, xAlign: xAlign, yAlign: yAlign)
         node.place = layout.layout(size: viewBox.size(), into: svgSizeInPixels)
+            .move(dx: -viewBox.x, dy: -viewBox.y)
 
-        // move to (0, 0)
-        node.place = node.place.move(dx: -viewBox.x, dy: -viewBox.y)
+        // The viewBox maps coordinates; the viewport defines the clipping boundary. With
+        // aspect-fit, content outside the viewBox can still be inside the viewport margins.
+        if clipsToViewport {
+            let clip = node.place.invert().map { svgSizeInPixels.rect().applying($0) } ?? Rect()
+            if node.clip as? Rect != clip { node.clip = clip }
+        }
     }
 
     private func validSize(_ size: Size?) -> Size? {

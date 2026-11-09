@@ -145,7 +145,8 @@ open class SVGParser {
             if let element = child.element {
                 if element.name == "svg" {
                     svgElement = element
-                    try prepareSvg(child.children)
+                    indexDefinitions(child.children)
+                    try prepareSvg(child.children, style: getStyleAttributes(baseStyle, element: element), ancestors: getClassNames(element))
                     break
                 }
             }
@@ -172,20 +173,27 @@ open class SVGParser {
         return root
     }
 
-    fileprivate func prepareSvg(_ children: [XMLIndexer]) throws {
-        try children.forEach { child in
-            try prepareSvg(child)
+    // Clip children can reference a later graphics element or a later stylesheet.
+    private func indexDefinitions(_ children: [XMLIndexer]) {
+        for child in children {
+            guard let element = child.element else { continue }
+            if element.name == "style" { parseStyle(child) }
+            if let id = element.allAttributes["id"]?.text { defNodes[id] = child }
+            if element.name == "defs" || element.name == "g" { indexDefinitions(child.children) }
         }
     }
 
-    fileprivate func prepareSvg(_ node: XMLIndexer) throws {
+    fileprivate func prepareSvg(_ children: [XMLIndexer], style: [String: String], ancestors: [String]) throws {
+        for child in children {
+            try prepareSvg(child, style: style, ancestors: ancestors)
+        }
+    }
+
+    fileprivate func prepareSvg(_ node: XMLIndexer, style: [String: String], ancestors: [String]) throws {
         if let element = node.element {
-            if element.name == "style" {
-                parseStyle(node)
-            } else if element.name == "defs" || element.name == "g" {
-                try node.children.forEach { child in
-                    try prepareSvg(child)
-                }
+            if element.name == "defs" || element.name == "g" {
+                let childStyle = getStyleAttributes(style, element: element, ancestorClasses: ancestors)
+                try prepareSvg(node.children, style: childStyle, ancestors: ancestors + getClassNames(element))
             }
             if let id = element.allAttributes["id"]?.text {
                 switch element.name {
@@ -198,9 +206,9 @@ open class SVGParser {
                 case "filter":
                     defEffects[id] = try parseEffect(node)
                 case "clip", "clipPath":
-                    defClip[id] = try parseClip(node)
+                    defClip[id] = try parseClip(node, inheritedStyle: style, ancestorClasses: ancestors)
                 default:
-                    defNodes[id] = node
+                    break
                 }
             }
         }
@@ -520,13 +528,42 @@ open class SVGParser {
         guard let element = group.element else {
             return .none
         }
+        // A clip belongs to this group's coordinate system; it is not inherited by its children.
+        var childStyle = style
+        childStyle.removeValue(forKey: "clip-path")
         var groupNodes: [Node] = []
         try group.children.forEach { child in
-            if let node = try parseNode(child, groupStyle: style, ancestorClasses: ancestorClasses) {
+            if let node = try parseNode(child, groupStyle: childStyle, ancestorClasses: ancestorClasses) {
                 groupNodes.append(node)
             }
         }
-        return Group(contents: groupNodes, place: getPosition(element), tag: getTag(element))
+        let result = Group(contents: groupNodes, place: getPosition(element), tag: getTag(element))
+        if style["clip-path"] != nil {
+            result.clip = getClipPath(style, locus: unclippedBounds(groupNodes))
+        }
+        return result
+    }
+
+    // objectBoundingBox uses descendant geometry before clipping, masking, or stroke expansion.
+    // Accumulate transforms to the owning group's coordinates without changing shared nodes or their bounds.
+    fileprivate func unclippedBounds(_ nodes: [Node], transform: Transform = .identity) -> Rect? {
+        var result: Rect?
+        for node in nodes {
+            let placement = transform.concat(with: node.place)
+            let bounds: Rect?
+            if let group = node as? Group {
+                bounds = unclippedBounds(group.contents, transform: placement)
+            } else if let shape = node as? Shape {
+                var cgTransform = placement.toCG()
+                bounds = shape.form.toCGPath().copy(using: &cgTransform)?.boundingBoxOfPath.toMacaw()
+            } else {
+                bounds = node.bounds?.applying(placement)
+            }
+            guard let bounds = bounds,
+                  bounds.x.isFinite, bounds.y.isFinite, bounds.w.isFinite, bounds.h.isFinite else { continue }
+            result = result?.union(rect: bounds) ?? bounds
+        }
+        return result
     }
 
     fileprivate func getPosition(_ element: SWXMLHash.XMLElement) -> Transform {
@@ -691,8 +728,12 @@ open class SVGParser {
                                         ancestorClasses: [String] = []) -> [String: String] {
         var styleAttributes: [String: String] = groupAttributes
 
+        // Presentation attributes precede stylesheet and inline declarations in the cascade.
+        if let rule = element.allAttributes["clip-rule"]?.text, rule != "inherit" {
+            styleAttributes["clip-rule"] = rule
+        }
         for (att, val) in styles.getStyles(element: element, ancestorClasses: ancestorClasses) {
-            if styleAttributes.index(forKey: att) == nil {
+            if styleAttributes.index(forKey: att) == nil || att == "clip-rule" {
                 styleAttributes.updateValue(val, forKey: att)
             }
         }
@@ -707,6 +748,7 @@ open class SVGParser {
             }
         }
 
+        if styleAttributes["clip-rule"] == "inherit" { styleAttributes["clip-rule"] = groupAttributes["clip-rule"] }
         let hasCurrentColor = styleAttributes[SVGKeys.fill] == SVGKeys.currentColor
 
         self.availableStyleAttributes.forEach { availableAttribute in
@@ -1307,64 +1349,93 @@ open class SVGParser {
                               groupStyle: [String: String] = [:],
                               place: Transform = .identity,
                               ancestorClasses: [String] = []) throws -> Node? {
-        guard let element = use.element, let link = element.allAttributes["xlink:href"]?.text else {
-            return .none
-        }
-        var id = link
-        if id.hasPrefix("#") {
-            id = id.replacingOccurrences(of: "#", with: "")
-        }
-        if let referenceNode = self.defNodes[id] {
-            if usedReferenced[id] == nil {
-                usedReferenced[id] = id
-                defer {
-                    usedReferenced.removeValue(forKey: id)
-                }
-                if let node = try parseNode(referenceNode,
-                                           groupStyle: groupStyle,
-                                           ancestorClasses: ancestorClasses) {
-                    node.place = place.move(dx: getDoubleValue(element, attribute: "x") ?? 0,
-                                            dy: getDoubleValue(element, attribute: "y") ?? 0).concat(with: node.place)
-                    return node
-                }
+        return try withReferencedNode(use, place: place) { reference, placement in
+            guard let node = try parseNode(reference, groupStyle: groupStyle, ancestorClasses: ancestorClasses) else {
+                return nil
             }
+            node.place = placement.concat(with: node.place)
+            return node
         }
-        return .none
     }
 
-    fileprivate func parseClip(_ clip: XMLIndexer) throws -> UserSpaceLocus? {
+    private func withReferencedNode<T>(_ use: XMLIndexer, place: Transform,
+                                       body: (XMLIndexer, Transform) throws -> T?) rethrows -> T? {
+        guard let element = use.element,
+              let link = element.allAttributes["xlink:href"]?.text ?? element.allAttributes["href"]?.text else { return nil }
+        let id = link.hasPrefix("#") ? String(link.dropFirst()) : link
+        guard let reference = defNodes[id], usedReferenced[id] == nil else { return nil }
+        usedReferenced[id] = id
+        defer { usedReferenced.removeValue(forKey: id) }
+        let placement = place.move(dx: getDoubleValue(element, attribute: "x") ?? 0,
+                                   dy: getDoubleValue(element, attribute: "y") ?? 0)
+        return try body(reference, placement)
+    }
+
+    fileprivate func parseClip(_ clip: XMLIndexer, inheritedStyle: [String: String], ancestorClasses: [String]) throws -> UserSpaceLocus? {
         var userSpace = true
         if let units = clip.element?.allAttributes["clipPathUnits"]?.text, units == "objectBoundingBox" {
             userSpace = false
         }
 
-        if clip.children.isEmpty {
-            return .none
+        guard let element = clip.element else { return nil }
+        // A definition inherits font and winding properties, but not a referencing element's
+        // clip, mask or display setting. A hidden definitions container can still supply clips.
+        let inheritedKeys = ["clip-rule", "font-family", "font-size", "font-weight", "text-anchor",
+                             "dominant-baseline", "alignment-baseline", "visibility"]
+        let inherited = getStyleAttributes(inheritedStyle, element: element, ancestorClasses: ancestorClasses)
+            .filter { inheritedKeys.contains($0.key) }
+        let placement = getPosition(element)
+        let classes = ancestorClasses + getClassNames(element)
+        var parts: [SVGClip.Part] = []
+        for child in clip.children {
+            parts += try clipParts(child, style: inherited, placement: placement, ancestors: classes)
         }
+        if parts.count == 1, parts[0].rule == .winding {
+            return UserSpaceLocus(locus: parts[0].placedForm, userSpace: userSpace)
+        }
+        return UserSpaceLocus(locus: SVGClip(parts), userSpace: userSpace)
+    }
 
-        if clip.children.count == 1 {
-            let shape = try parseNode(clip.children.first!) as! Shape
-            if shape.place != Transform.identity {
-                let locus = TransformedLocus(locus: shape.form, transform: shape.place)
-                return UserSpaceLocus(locus: locus, userSpace: userSpace)
-            }
-            return UserSpaceLocus(locus: shape.form, userSpace: userSpace)
+    private func clipParts(_ child: XMLIndexer, style inherited: [String: String],
+                           placement: Transform, ancestors: [String]) throws -> [SVGClip.Part] {
+        guard let element = child.element else { return [] }
+        let style = getStyleAttributes(inherited, element: element, ancestorClasses: ancestors)
+        guard style["display"] != "none" else { return [] }
+        let classes = ancestors + getClassNames(element)
+        if element.name == "use" {
+            let place = placement.concat(with: getPosition(element))
+            return try withReferencedNode(child, place: place) { ref, position in
+                try clipParts(ref, style: style, placement: position, ancestors: classes)
+            } ?? []
         }
-        var path: Path? = .none
-        try clip.children.forEach { indexer in
-            if let shape = try parseNode(indexer) as? Shape {
-                if let p = path {
-                    path = Path(segments: p.segments + shape.form.toPath().segments, fillRule: p.fillRule)
-                } else {
-                    path = Path(segments: shape.form.toPath().segments)
-                }
-            }
+        if element.name == "g" || element.name == "a" || element.name == "symbol" {
+            let place = placement.concat(with: getPosition(element))
+            return try child.children.flatMap { try clipParts($0, style: style, placement: place, ancestors: classes) }
         }
+        guard let node = try parseElement(child, style: style, ancestorClasses: classes) else { return [] }
+        var parts: [SVGClip.Part] = []
+        let rule: CGPathFillRule = style["clip-rule"] == "evenodd" ? .evenOdd : .winding
+        collectClipParts(node, placement: placement, rule: rule, into: &parts)
+        return parts
+    }
 
-        if let path = path {
-            return UserSpaceLocus(locus: path, userSpace: userSpace)
+    private func collectClipParts(_ node: Node, placement: Transform, rule: CGPathFillRule,
+                                  into parts: inout [SVGClip.Part]) {
+        let position = placement.concat(with: node.place)
+        let form: Locus
+        if let shape = node as? Shape {
+            form = shape.form
+        } else if let text = node as? Text {
+            form = TextRenderer.glyphOutline(for: text)
+        } else if let group = node as? Group {
+            for child in group.contents {
+                collectClipParts(child, placement: position, rule: rule, into: &parts)
+            }
+            return
+        } else {
+            return
         }
-        return .none
+        parts.append(SVGClip.Part(form, place: position, rule: rule))
     }
 
     fileprivate func parseMask(_ mask: XMLIndexer) throws -> UserSpaceNode? {
@@ -1764,15 +1835,16 @@ open class SVGParser {
         return false
     }
 
-    fileprivate func getClipPath(_ attributes: [String: String], locus: Locus?) -> Locus? {
+    fileprivate func getClipPath(_ attributes: [String: String], locus: @autoclosure () -> Locus?) -> Locus? {
         if let clipPath = attributes["clip-path"], let id = parseIdFromUrl(clipPath) {
             if let userSpaceLocus = defClip[id] {
                 if !userSpaceLocus.userSpace {
-                    guard let locus = locus else {
+                    guard let locus = locus() else {
                         return .none
                     }
                     let transform = BoundsUtils.transformForLocusInRespectiveCoords(respectiveLocus: userSpaceLocus.locus,
                                                                                     absoluteLocus: locus)
+                    if let clip = userSpaceLocus.locus as? SVGClip { return clip.applying(transform) }
                     return TransformedLocus(locus: userSpaceLocus.locus, transform: transform)
                 }
                 return userSpaceLocus.locus

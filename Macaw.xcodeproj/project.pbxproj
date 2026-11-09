@@ -195,6 +195,7 @@
 		57614B341F83D15600875933 /* SVGParserError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E1481E3B393900D1CB28 /* SVGParserError.swift */; };
 		57614B361F83D15600875933 /* Disposable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E1061E3B393900D1CB28 /* Disposable.swift */; };
 		57614B371F83D15600875933 /* Path.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E12C1E3B393900D1CB28 /* Path.swift */; };
+		CF541BB23B2DAFB452BB0001 /* SVGClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF541BB23B2DAFB452BB0003 /* SVGClip.swift */; };
 		57614B381F83D15600875933 /* Line.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E1291E3B393900D1CB28 /* Line.swift */; };
 		57614B391F83D15600875933 /* PathBounds.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E0F21E3B393900D1CB28 /* PathBounds.swift */; };
 		57614B3A1F83D15600875933 /* AnimationProducer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E0E51E3B393900D1CB28 /* AnimationProducer.swift */; };
@@ -304,6 +305,7 @@
 		57E5E1911E3B393900D1CB28 /* Locus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E12A1E3B393900D1CB28 /* Locus.swift */; };
 		57E5E1921E3B393900D1CB28 /* MoveTo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E12B1E3B393900D1CB28 /* MoveTo.swift */; };
 		57E5E1931E3B393900D1CB28 /* Path.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E12C1E3B393900D1CB28 /* Path.swift */; };
+		CF541BB23B2DAFB452BB0002 /* SVGClip.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF541BB23B2DAFB452BB0003 /* SVGClip.swift */; };
 		57E5E1941E3B393900D1CB28 /* PathBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E12D1E3B393900D1CB28 /* PathBuilder.swift */; };
 		57E5E1951E3B393900D1CB28 /* PathSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E12E1E3B393900D1CB28 /* PathSegment.swift */; };
 		57E5E1961E3B393900D1CB28 /* PathSegmentType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57E5E12F1E3B393900D1CB28 /* PathSegmentType.swift */; };
@@ -923,6 +925,7 @@
 		57E5E12A1E3B393900D1CB28 /* Locus.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Locus.swift; sourceTree = "<group>"; };
 		57E5E12B1E3B393900D1CB28 /* MoveTo.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MoveTo.swift; sourceTree = "<group>"; };
 		57E5E12C1E3B393900D1CB28 /* Path.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Path.swift; sourceTree = "<group>"; };
+		CF541BB23B2DAFB452BB0003 /* SVGClip.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SVGClip.swift; sourceTree = "<group>"; };
 		57E5E12D1E3B393900D1CB28 /* PathBuilder.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PathBuilder.swift; sourceTree = "<group>"; };
 		57E5E12E1E3B393900D1CB28 /* PathSegment.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PathSegment.swift; sourceTree = "<group>"; };
 		57E5E12F1E3B393900D1CB28 /* PathSegmentType.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PathSegmentType.swift; sourceTree = "<group>"; };
@@ -1677,6 +1680,7 @@
 				57E5E12A1E3B393900D1CB28 /* Locus.swift */,
 				57E5E12B1E3B393900D1CB28 /* MoveTo.swift */,
 				57E5E12C1E3B393900D1CB28 /* Path.swift */,
+				CF541BB23B2DAFB452BB0003 /* SVGClip.swift */,
 				57E5E12D1E3B393900D1CB28 /* PathBuilder.swift */,
 				57E5E12E1E3B393900D1CB28 /* PathSegment.swift */,
 				57E5E12F1E3B393900D1CB28 /* PathSegmentType.swift */,
@@ -2745,6 +2749,7 @@
 				57614B361F83D15600875933 /* Disposable.swift in Sources */,
 				5B6E192C20AC58F900454E7E /* AspectRatio.swift in Sources */,
 				57614B371F83D15600875933 /* Path.swift in Sources */,
+				CF541BB23B2DAFB452BB0001 /* SVGClip.swift in Sources */,
 				57614B381F83D15600875933 /* Line.swift in Sources */,
 				57614B391F83D15600875933 /* PathBounds.swift in Sources */,
 				57614B3A1F83D15600875933 /* AnimationProducer.swift in Sources */,
@@ -2886,6 +2891,7 @@
 				57E5E1AC1E3B393900D1CB28 /* SVGParserError.swift in Sources */,
 				57E5E1711E3B393900D1CB28 /* Disposable.swift in Sources */,
 				57E5E1931E3B393900D1CB28 /* Path.swift in Sources */,
+				CF541BB23B2DAFB452BB0002 /* SVGClip.swift in Sources */,
 				5B6E192B20AC58F900454E7E /* AspectRatio.swift in Sources */,
 				57E5E1901E3B393900D1CB28 /* Line.swift in Sources */,
 				57E5E1611E3B393900D1CB28 /* PathBounds.swift in Sources */,
