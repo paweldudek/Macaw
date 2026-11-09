@@ -4,6 +4,37 @@ import AppKit
 @testable import Macaw
 
 final class SVGClippingTests: XCTestCase {
+    func testRootViewportPreservesLetterboxedContentAndClipsOutsideTheViewport() throws {
+        // The 200x100 viewport is centered in a 200x180 output. Its square viewBox starts
+        // at x=50. SVG content may occupy the 50 points to its left inside the viewport.
+        let node = try SVGParser.parse(text: """
+        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="10 20 100 100">
+          <rect x="-20" y="50" width="20" height="30" fill="red"/>
+          <rect x="20" y="50" width="20" height="30" fill="blue"/>
+          <rect x="40" y="0" width="20" height="16" fill="green"/>
+        </svg>
+        """)
+        let image = node.toNativeImage(size: Size(w: 200, h: 180), scale: 1)
+        let rep = try XCTUnwrap(NSBitmapImageRep(data: XCTUnwrap(image.tiffRepresentation)))
+        try assertOpaque(rep, at: [(30,90),(70,90)])
+        try assertTransparent(rep, at: [(90,30),(90,150)])
+    }
+
+    func testEmptyViewBoxLeavesAFiniteEmptyClip() throws {
+        for dimensions in ["0 0 0 100", "0 0 100 0"] {
+            let node = try SVGParser.parse(text: """
+            <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="\(dimensions)">
+              <rect width="100" height="100" fill="red"/>
+            </svg>
+            """)
+            let image = node.toNativeImage(size: Size(w: 100, h: 100), scale: 1)
+            let rep = try XCTUnwrap(NSBitmapImageRep(data: XCTUnwrap(image.tiffRepresentation)))
+            XCTAssertEqual(node.clip as? Rect, Rect())
+            XCTAssertEqual(node.place, .identity)
+            try assertTransparent(rep, at: [(10,10),(50,50),(90,90)])
+        }
+    }
+
     func testGroupClipClipsPaintedPixels() throws {
         let image = try render("""
         <defs><clipPath id="clip"><rect x="30" y="20" width="40" height="60"/></clipPath></defs>
